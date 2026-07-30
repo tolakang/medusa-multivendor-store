@@ -1,0 +1,18 @@
+{
+  "name": "medusa-multivendor-store",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "medusa develop",
+    "build": "medusa build",
+    "start": "medusa start",
+    "start:server": "MEDUSA_WORKER_MODE=server medusa start",
+    "start:worker": "MEDUSA_WORKER_MODE=worker medusa start",
+    "predeploy": "medusa db:migrate && medusa links:sync",
+    "migrate": "medusa db:migrate",
+    "seed": "medusa seed",
+    "test": "jest"
+  }
+}
