@@ -2,6 +2,26 @@
 
 This guide walks you through deploying the Medusa 2.0 Multi-Vendor Store on Dokploy.
 
+## Architecture Overview
+
+**Single Docker Compose Deployment** — All 6 services run together in ONE Dokploy application:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Dokploy Application (medusa-multivendor)               │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  postgres (port 5432)                             │  │
+│  │  redis (port 6379)                                │  │
+│  │  meilisearch (port 7700)                          │  │
+│  │  medusa-server (port 9000)                        │  │
+│  │  medusa-worker (no exposed port)                  │  │
+│  │  medusa-storefront (port 8080)                    │  │
+│  └───────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+```
+
+> **Important**: You do NOT need to create separate Dokploy applications for each service. One Docker Compose deployment handles all services with automatic dependency ordering and health checks.
+
 ## Step 1: Prepare Your Repository
 
 1. Push your code to GitHub:

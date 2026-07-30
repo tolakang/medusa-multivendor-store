@@ -39,6 +39,15 @@ medusa-multivendor-store/
 
 ## Deployment on Dokploy
 
+### Single Docker Compose Deployment
+
+All services (PostgreSQL, Redis, Meilisearch, Medusa Server, Medusa Worker, Storefront) deploy together in **ONE Dokploy application** using Docker Compose. Dokploy automatically:
+
+- Starts services in dependency order (PostgreSQL → Redis → Meilisearch → Medusa Server → Worker → Storefront)
+- Monitors each service individually (CPU, Memory, Logs)
+- Manages health checks and restarts
+- Handles internal networking via `medusa-net`
+
 ### Prerequisites
 
 1. Dokploy installed on your Ubuntu server
@@ -58,9 +67,10 @@ medusa-multivendor-store/
 
 2. **Create Dokploy Application**:
    - Go to your Dokploy dashboard
-   - Click "Create New" → "Docker Compose"
+   - Click **"Create New"** → **"Docker Compose"**
    - Name your application (e.g., `medusa-multivendor`)
    - Connect your GitHub repository
+   - Paste the contents of `docker-compose.yml`
 
 3. **Configure Environment Variables**:
    In Dokploy, go to the Environment tab and add:
@@ -78,7 +88,7 @@ medusa-multivendor-store/
 
 4. **Deploy**:
    - Click "Deploy" in Dokploy
-   - Wait for the build to complete
+   - Wait for all 6 services to start (check Logs tab)
    - Access your services at the provided URLs
 
 ### Multi-Vendor Features
