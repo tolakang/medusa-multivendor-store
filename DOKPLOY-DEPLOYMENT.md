@@ -63,11 +63,27 @@ DISABLE_MEDUSA_ADMIN=false
 ```
 
 ### CORS (update with your actual domains)
+
+The CORS variables control which domains can access your Medusa API. Use your actual domain names in production.
+
+**Example with subdomains:**
 ```
 STORE_CORS=https://store.yourdomain.com
 ADMIN_CORS=https://admin.yourdomain.com
 AUTH_CORS=https://store.yourdomain.com,https://admin.yourdomain.com
 ```
+
+**Example with single domain:**
+```
+STORE_CORS=https://yourdomain.com
+ADMIN_CORS=https://yourdomain.com
+AUTH_CORS=https://yourdomain.com
+```
+
+**Important notes:**
+- Always use `https://` in production
+- Separate multiple origins with commas (no spaces)
+- No trailing slashes
 
 ### Meilisearch
 ```
