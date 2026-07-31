@@ -1,0 +1,9 @@
+{
+  "name": "Medusa Multi-Vendor Store",
+  "short_name": "Medusa Store",
+  "description": "Medusa 2.0 Multi-Vendor E-commerce Store",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000"
+}
