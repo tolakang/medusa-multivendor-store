@@ -1,19 +1,18 @@
 # =============================================================================
-# Medusa 2.0 Multi-Vendor Backend — Production Dockerfile (Monorepo)
+# Medusa 2.0 Backend (monorepo mode — generic Dockerfile) (pnpm)
 # =============================================================================
 FROM node:22-alpine AS base
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm config set fetch-retries 5 && \
-    npm config set fetch-retry-mintimeout 60000 && \
-    npm config set fetch-retry-maxtimeout 120000 && \
-    echo "Installing dependencies (may take 5-15 min on first build)..." && \
+COPY package.json pnpm-lock.yaml* ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    echo "Installing dependencies with pnpm..." && \
     for i in 1 2 3 4 5; do \
-      echo "Attempt $i: npm install..." && \
-      npm install --legacy-peer-deps --no-audit --no-fund && \
+      echo "Attempt $i: pnpm install..." && \
+      pnpm install --frozen-lockfile 2>/dev/null || pnpm install && \
       echo "Attempt $i succeeded" && \
       break || \
       echo "Attempt $i failed, waiting 30s..." && \
@@ -25,18 +24,19 @@ WORKDIR /app
 ENV NODE_ENV=development
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apk add --no-cache curl netcat-openbsd
+RUN corepack enable
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 medusa
 COPY --from=builder /app/.medusa/server ./
-COPY --from=builder /app/src/scripts/start-monorepo.sh ./start-monorepo.sh
-RUN chmod +x ./start-monorepo.sh && chown -R medusa:nodejs /app
+COPY --from=builder /app/src/scripts/start-monorepo.sh ./start-server.sh
+RUN chmod +x ./start-server.sh && chown -R medusa:nodejs /app
 USER medusa
 EXPOSE 9000
 ENV PORT=9000
-CMD ["./start-monorepo.sh"]
+CMD ["./start-server.sh"]

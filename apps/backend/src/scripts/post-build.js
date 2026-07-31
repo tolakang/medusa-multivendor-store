@@ -1,37 +1,38 @@
-const fs = require('fs');
-const { execSync } = require('child_process');
-const path = require('path');
+#!/usr/bin/env node
+// post-build.js — copies lockfile into .medusa/server and installs prod deps with pnpm
+const fs = require("fs");
+const path = require("path");
+const { execSync } = require("child_process");
 
-const MEDUSA_SERVER_PATH = path.join(process.cwd(), '.medusa', 'server');
+const medusaServerDir = path.resolve(__dirname, "../../../.medusa/server");
 
-// Check if .medusa/server exists - if not, build process failed
-if (!fs.existsSync(MEDUSA_SERVER_PATH)) {
-  throw new Error('.medusa/server directory not found. This indicates the Medusa build process failed. Please check for build errors.');
-}
-
-// Copy package-lock.json (npm) to .medusa/server for deterministic installs
-const lockfile = path.join(process.cwd(), 'package-lock.json');
-if (fs.existsSync(lockfile)) {
-  fs.copyFileSync(lockfile, path.join(MEDUSA_SERVER_PATH, 'package-lock.json'));
-  console.log('Copied package-lock.json to .medusa/server/');
-}
-
-// Copy .env if it exists (for local builds)
-const envPath = path.join(process.cwd(), '.env');
-if (fs.existsSync(envPath)) {
-  fs.copyFileSync(envPath, path.join(MEDUSA_SERVER_PATH, '.env'));
-  console.log('Copied .env to .medusa/server/');
-}
-
-// Install production dependencies in .medusa/server
-console.log('Installing production dependencies in .medusa/server...');
-try {
-  execSync('npm install --production', {
-    cwd: MEDUSA_SERVER_PATH,
-    stdio: 'inherit'
-  });
-  console.log('Production dependencies installed successfully.');
-} catch (error) {
-  console.error('Failed to install production dependencies:', error.message);
+if (!fs.existsSync(medusaServerDir)) {
+  console.error("ERROR: .medusa/server directory not found after build");
   process.exit(1);
+}
+
+const lockFiles = [
+  { src: "pnpm-lock.yaml", dest: "pnpm-lock.yaml" },
+  { src: "pnpm-workspace.yaml", dest: "pnpm-workspace.yaml" },
+  { src: "package.json", dest: "package.json" },
+];
+
+for (const lock of lockFiles) {
+  const srcPath = path.resolve(__dirname, "../../..", lock.src);
+  const destPath = path.join(medusaServerDir, lock.dest);
+  if (fs.existsSync(srcPath) && !fs.existsSync(destPath)) {
+    fs.copyFileSync(srcPath, destPath);
+    console.log(`Copied ${lock.src} to .medusa/server/`);
+  }
+}
+
+console.log("Installing production dependencies in .medusa/server/...");
+try {
+  execSync("cd " + medusaServerDir + " && pnpm install --prod", {
+    stdio: "inherit",
+  });
+  console.log("Production dependencies installed successfully");
+} catch (error) {
+  console.error("Failed to install production dependencies:", error.message);
+  console.log("Continuing without prod deps in .medusa/server...");
 }

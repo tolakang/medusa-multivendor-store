@@ -1,58 +1,60 @@
 #!/bin/sh
 set -e
 
-echo "=========================================="
-echo "Medusa Starting (Worker Mode: $MEDUSA_WORKER_MODE)..."
-echo "=========================================="
+echo "=== Medusa Backend Starting (mode: $MEDUSA_WORKER_MODE) ==="
 
-# Extract host and port from DATABASE_URL
-DB_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\([^:]*\):\([0-9]*\)/.*|\1|p')
-DB_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*@\([^:]*\):\([0-9]*\)/.*|\2|p')
+DB_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\([^:/]*\).*|\1|p')
+DB_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*:\([0-9]*\)/.*|\1|p')
+REDIS_HOST=$(echo "$REDIS_URL" | sed -n 's|.*@\([^:/]*\).*|\1|p')
+REDIS_PORT=$(echo "$REDIS_URL" | sed -n 's|.*:\([0-9]*\)$|\1|p')
 
-# Extract host and port from REDIS_URL
-REDIS_HOST=$(echo "$REDIS_URL" | sed -n 's|redis://\([^:]*\):\([0-9]*\).*|\1|p')
-REDIS_PORT=$(echo "$REDIS_URL" | sed -n 's|redis://\([^:]*\):\([0-9]*\).*|\2|p')
+DB_PORT=${DB_PORT:-5432}
+REDIS_PORT=${REDIS_PORT:-6379}
+MAX_RETRIES=30
+RETRY_INTERVAL=2
 
-echo "Database: $DB_HOST:$DB_PORT"
-echo "Redis: $REDIS_HOST:$REDIS_PORT"
-
-# Wait for PostgreSQL
-echo "Waiting for PostgreSQL at $DB_HOST:$DB_PORT..."
-RETRIES=30
-until nc -z "$DB_HOST" "$DB_PORT" 2>/dev/null; do
-  RETRIES=$((RETRIES - 1))
-  if [ "$RETRIES" -le 0 ]; then
-    echo "ERROR: PostgreSQL is not available after 30 attempts"
-    exit 1
+echo "Waiting for PostgreSQL at ${DB_HOST}:${DB_PORT}..."
+i=0
+while [ $i -lt $MAX_RETRIES ]; do
+  if nc -z "$DB_HOST" "$DB_PORT" 2>/dev/null; then
+    echo "PostgreSQL is ready!"
+    break
   fi
-  echo "PostgreSQL not ready, retrying in 2s... ($RETRIES left)"
-  sleep 2
+  i=$((i + 1))
+  echo "PostgreSQL not ready (attempt $i/$MAX_RETRIES), retrying in ${RETRY_INTERVAL}s..."
+  sleep $RETRY_INTERVAL
 done
-echo "PostgreSQL is ready!"
-
-# Wait for Redis
-echo "Waiting for Redis at $REDIS_HOST:$REDIS_PORT..."
-RETRIES=30
-until nc -z "$REDIS_HOST" "$REDIS_PORT" 2>/dev/null; do
-  RETRIES=$((RETRIES - 1))
-  if [ "$RETRIES" -le 0 ]; then
-    echo "ERROR: Redis is not available after 30 attempts"
-    exit 1
-  fi
-  echo "Redis not ready, retrying in 2s... ($RETRIES left)"
-  sleep 2
-done
-echo "Redis is ready!"
-
-# Run migrations only for server instances
-if [ "$MEDUSA_WORKER_MODE" != "worker" ]; then
-  echo "Running database migrations..."
-  npx medusa db:migrate
-  echo "Migrations completed!"
-else
-  echo "Worker mode: skipping migrations"
+if [ $i -eq $MAX_RETRIES ]; then
+  echo "ERROR: PostgreSQL not ready after $MAX_RETRIES attempts"
+  exit 1
 fi
 
-# Start the Medusa server
+echo "Waiting for Redis at ${REDIS_HOST}:${REDIS_PORT}..."
+i=0
+while [ $i -lt $MAX_RETRIES ]; do
+  if nc -z "$REDIS_HOST" "$REDIS_PORT" 2>/dev/null; then
+    echo "Redis is ready!"
+    break
+  fi
+  i=$((i + 1))
+  echo "Redis not ready (attempt $i/$MAX_RETRIES), retrying in ${RETRY_INTERVAL}s..."
+  sleep $RETRY_INTERVAL
+done
+if [ $i -eq $MAX_RETRIES ]; then
+  echo "ERROR: Redis not ready after $MAX_RETRIES attempts"
+  exit 1
+fi
+
+MODE="${MEDUSA_WORKER_MODE:-server}"
+if [ "$MODE" = "server" ]; then
+  echo "Server mode: running migrations..."
+  pnpm medusa db:migrate
+elif [ "$MODE" = "shared" ]; then
+  echo "Shared mode: running migrations..."
+  pnpm medusa db:migrate
+else
+  echo "Worker mode: skipping migrations."
+fi
+
 echo "Starting Medusa on port ${PORT:-9000}..."
-exec npx medusa start --verbose
+exec pnpm medusa start --verbose

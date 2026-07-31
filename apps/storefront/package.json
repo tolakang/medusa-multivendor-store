@@ -1,22 +1,26 @@
 {
-  "name": "@medusa/storefront",
+  "name": "medusa-storefront",
   "version": "1.0.0",
   "private": true,
-  "description": "Medusa 2.0 multi-vendor e-commerce storefront (Next.js)",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=8.0.0"
+  },
   "scripts": {
-    "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "dev": "next dev"
   },
   "dependencies": {
-    "next": "^14.0.0",
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0"
+    "@medusajs/js-sdk": "^2.8.4",
+    "@medusajs/ui": "^2.8.4",
+    "next": "^14.2.24",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/react": "^18.0.0",
-    "typescript": "^5.0.0"
+    "@types/node": "^22.12.0",
+    "@types/react": "^18.3.18",
+    "typescript": "^5.6.3"
   }
 }

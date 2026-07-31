@@ -1,30 +1,28 @@
 {
-  "name": "@medusa/backend",
+  "name": "medusa-backend",
   "version": "1.0.0",
   "private": true,
-  "description": "Medusa 2.0 multi-vendor e-commerce backend for Dokploy",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=8.0.0"
+  },
   "scripts": {
-    "dev": "medusa develop",
     "build": "medusa build && node src/scripts/post-build.js",
-    "start": "cd .medusa/server && medusa start --verbose",
-    "predeploy": "medusa db:migrate && medusa links:sync",
-    "migrate": "medusa db:migrate",
-    "seed": "medusa seed",
-    "test": "jest"
+    "start": "medusa start",
+    "dev": "medusa develop",
+    "db:migrate": "medusa db:migrate"
   },
   "dependencies": {
-    "@medusajs/medusa": "^2.0.0",
-    "@medusajs/cli": "^2.0.0",
-    "@medusajs/framework": "^2.0.0",
-    "@medusajs/dashboard": "^2.0.0",
-    "@medusajs/workflow-engine-redis": "^2.0.0",
-    "@rokmohar/medusa-plugin-meilisearch": "^1.4.0",
-    "pg": "^8.13.0",
-    "dotenv": "^16.0.0",
-    "ts-node": "^10.9.0",
-    "typescript": "^5.0.0"
-  },
-  "engines": {
-    "node": ">=22.0.0"
+    "@medusajs/cli": "^2.8.4",
+    "@medusajs/dashboard": "^2.8.4",
+    "@medusajs/framework": "^2.8.4",
+    "@medusajs/medusa": "^2.8.4",
+    "@medusajs/medusa-cli": "^1.6.15",
+    "@medusajs/utils": "^2.8.4",
+    "@rokmohar/medusa-plugin-meilisearch": "^1.4.3",
+    "dotenv": "^16.4.7",
+    "pg": "^8.13.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
   }
 }
