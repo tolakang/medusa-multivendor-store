@@ -13,7 +13,7 @@ COPY package.json .npmrc pnpm-lock.yaml* ./
 # Install dependencies with aggressive retry for rate-limited environments
 # --prefer-offline: use local cache before hitting registry
 # --no-frozen-lockfile: generate lockfile if missing
-# --network-concurrency=2 --fetch-retry-factor=2: reduce concurrent requests to avoid 429
+# --network-concurrency=2: reduce concurrent requests | --fetch-retry-factor=2: exponential backoff
 # Cache mounts persist pnpm store across builds (first build: 10-15min, cached: 30-60s)
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     --mount=type=cache,target=/root/.npm \

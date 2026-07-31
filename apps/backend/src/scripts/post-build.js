@@ -59,7 +59,7 @@ if (!fs.existsSync(generatedPkg)) {
 
 // Install production dependencies with aggressive retry logic
 // Oracle Cloud IPs are heavily rate-limited by npm registry
-const PNPM_FLAGS = "--no-frozen-lockfile --prefer-offline --fetch-retries=10 --fetch-retry-mintimeout=120000 --fetch-retry-maxtimeout=600000 --network-concurrency=2";
+const PNPM_FLAGS = "--no-frozen-lockfile --prefer-offline --fetch-retries=10 --fetch-retry-mintimeout=120000 --fetch-retry-maxtimeout=600000 --network-concurrency=2 --fetch-retry-factor=2";
 const MAX_RETRIES = 5;
 const RETRY_DELAYS = [30, 60, 120, 300, 600]; // seconds: 30s, 1m, 2m, 5m, 10m
 

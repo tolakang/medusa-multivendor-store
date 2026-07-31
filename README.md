@@ -42,9 +42,24 @@
 | Medusa Worker | Custom build | — | Background Jobs |
 | Storefront | Custom build | 3000 | Next.js Storefront |
 
-## Quick Start (5 Steps)
+## Quick Start (6 Steps)
 
 > **Prerequisites**: Dokploy installed on Ubuntu, domain pointed to your server, Git access to this repo.
+
+### Step 0 — Generate Lockfiles (CRITICAL!)
+
+> ⚠️ **DO NOT SKIP THIS.** Without lockfiles, Docker builds will fail with `429 Too Many Requests` on Oracle Cloud IPs.
+
+```bash
+ssh ubuntu@your-server-ip
+cd medusa-multivendor-store
+bash scripts/generate-lockfile.sh
+git add apps/backend/pnpm-lock.yaml apps/storefront/pnpm-lock.yaml
+git commit -m "Add pnpm lockfiles to prevent npm 429 rate limiting"
+git push origin main
+```
+
+This generates `pnpm-lock.yaml` files that prevent npm rate limiting. **Run once, never needed again** (unless you update `package.json`).
 
 ### Step 1 — Deploy Infrastructure
 
@@ -138,6 +153,7 @@ For full environment variable reference, troubleshooting, and build optimization
 | `docker-compose.server.yml` | Medusa Server |
 | `docker-compose.worker.yml` | Medusa Worker |
 | `docker-compose.storefront.yml` | Next.js Storefront |
+| `scripts/generate-lockfile.sh` | Generate lockfiles (run once on server) |
 | `apps/backend/Dockerfile` | Generic build (monorepo) |
 | `apps/backend/Dockerfile.server` | Server build |
 | `apps/backend/Dockerfile.worker` | Worker build |
