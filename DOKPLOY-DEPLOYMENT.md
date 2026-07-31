@@ -42,7 +42,7 @@ Deploy everything in a single Docker Compose. Slower but simpler.
 1. **Dokploy** → **Projects** → Select/Create Project
 2. Click **Create Service** → **Docker Compose**
 3. Fill in:
-   - **Service Name**: `infra` (or `medusa-infra`)
+   - **Service Name**: `medusainfra`
    - **Git Repository**: `https://github.com/tolakang/medusa-multivendor-store.git`
    - **Branch**: `main`
    - **Build Context**: `./`
@@ -61,17 +61,76 @@ MEILISEARCH_ADMIN_KEY=CHANGE_ME_master_key
 
 **Verify infrastructure is ready:**
 ```bash
-# In Dokploy terminal
-docker ps | grep -E "postgres|redis|meilisearch"
+# ⚠️ IMPORTANT: Do NOT run docker ps inside a container!
+# Docker is NOT installed inside containers.
+# Use the Dokploy Docker Terminal instead (see below).
 ```
 
 ---
 
-### Step 2: Deploy Medusa Server
+### Step 2: Find Service Hostnames (CRITICAL)
+
+After infrastructure is deployed, you need the **exact hostnames** for PostgreSQL, Redis, and Meilisearch.
+
+#### Method 1: Docker Terminal (Recommended)
+
+1. Go to **Dokploy** → **Docker** → **Containers**
+2. You'll see containers like:
+   ```
+   medusa-js-medusainfra-ubpc7h-postgres-1
+   medusa-js-medusainfra-ubpc7h-redis-1
+   medusa-js-medusainfra-ubpc7h-meilisearch-1
+   ```
+3. Click on **postgres** container → **Docker Terminal**
+4. Run these commands to find the hostname:
+
+```bash
+# Find this container's hostname
+hostname
+
+# Find all hostnames this container can reach
+cat /etc/hosts
+```
+
+5. The hostname you need is usually the **service name** from the compose file:
+   - `postgres` (from docker-compose.infra.yml)
+   - `redis` (from docker-compose.infra.yml)
+   - `meilisearch` (from docker-compose.infra.yml)
+
+6. **Test connectivity** from the postgres container:
+
+```bash
+# Test if redis is reachable
+ping redis
+
+# Test if meilisearch is reachable
+ping meilisearch
+```
+
+7. If `ping` isn't available, use `cat /etc/hosts` to see all resolvable names.
+
+#### Method 2: Check Docker Networks
+
+1. In Dokploy, go to **Docker** → **Networks**
+2. Find the network for your infrastructure service
+3. Click on it to see all connected containers and their IPs
+
+#### Method 3: Use the Actual Container Name
+
+If service names don't work, try the full container name:
+```
+medusa-js-medusainfra-ubpc7h-postgres-1
+```
+
+**Write down the correct hostnames** — you'll need them for the server and worker.
+
+---
+
+### Step 3: Deploy Medusa Server
 
 1. **Dokploy** → **Create Service** → **Docker Compose**
 2. Fill in:
-   - **Service Name**: `server` (or `medusa-server`)
+   - **Service Name**: `medusaserver`
    - **Compose File**: `docker-compose.server.yml`
    - **Build Context**: `./`
 3. **Environment** tab — set ALL of these:
@@ -82,10 +141,10 @@ POSTGRES_USER=medusa
 POSTGRES_PASSWORD=CHANGE_ME_strong_password
 POSTGRES_DB=medusa_store
 
-# ─── Host Discovery (CRITICAL - see below) ───
-POSTGRES_HOST=infra-postgres
-REDIS_HOST=infra-redis
-MEILISEARCH_HOST=infra-meilisearch
+# ─── Host Discovery (use hostnames from Step 2) ───
+POSTGRES_HOST=postgres
+REDIS_HOST=redis
+MEILISEARCH_HOST=meilisearch
 
 # ─── Medusa ───
 JWT_SECRET=CHANGE_ME_random_32_char_string_here
@@ -105,11 +164,11 @@ AUTH_CORS=https://your-storefront-domain.com,https://your-admin-domain.com
 
 ---
 
-### Step 3: Deploy Medusa Worker
+### Step 4: Deploy Medusa Worker
 
 1. **Dokploy** → **Create Service** → **Docker Compose**
 2. Fill in:
-   - **Service Name**: `worker` (or `medusa-worker`)
+   - **Service Name**: `medusaworker`
    - **Compose File**: `docker-compose.worker.yml`
 3. **Environment** tab — set (same DB/Redis/Meilisearch as server):
 
@@ -119,10 +178,10 @@ POSTGRES_USER=medusa
 POSTGRES_PASSWORD=CHANGE_ME_strong_password
 POSTGRES_DB=medusa_store
 
-# ─── Host Discovery ───
-POSTGRES_HOST=infra-postgres
-REDIS_HOST=infra-redis
-MEILISEARCH_HOST=infra-meilisearch
+# ─── Host Discovery (same as server) ───
+POSTGRES_HOST=postgres
+REDIS_HOST=redis
+MEILISEARCH_HOST=meilisearch
 
 # ─── Medusa ───
 JWT_SECRET=CHANGE_ME_random_32_char_string_here
@@ -135,11 +194,11 @@ MEDUSA_DISABLE_ADMIN=true
 
 ---
 
-### Step 4: Deploy Storefront
+### Step 5: Deploy Storefront
 
 1. **Dokploy** → **Create Service** → **Docker Compose**
 2. Fill in:
-   - **Service Name**: `storefront` (or `medusa-storefront`)
+   - **Service Name**: `medusastorefront`
    - **Compose File**: `docker-compose.storefront.yml`
 3. **Environment** tab:
 
@@ -153,7 +212,7 @@ STORE_NAME=Medusa Multi-Vendor Store
 
 ---
 
-### Step 5: Configure Domains
+### Step 6: Configure Domains
 
 In Dokploy → each service → **Domains** tab:
 
@@ -166,62 +225,59 @@ In Dokploy → each service → **Domains** tab:
 
 ---
 
-### Step 6: Create Admin User
+### Step 7: Create Admin User
 
-In Dokploy terminal:
+In Dokploy → Docker Terminal → select the **server** container:
+
 ```bash
-# Find the server container name
-docker ps | grep server
-
-# Create admin user (replace container name)
-docker exec -it <server-container-name> npx medusa user -e admin@example.com -p password
+npx medusa user -e admin@example.com -p password
 ```
 
 ---
 
-## 🔍 Finding Service Hostnames (CRITICAL)
+## 🔍 Finding Service Hostnames — Detailed Guide
 
-When using individual services, you need the **exact Docker hostnames**. Here's how to find them:
+### Why `docker ps` Doesn't Work
 
-### Method 1: Docker Networks (Recommended)
+The Docker Terminal in Dokploy connects you **inside a container**. Containers are isolated — they don't have Docker installed. So commands like `docker ps`, `docker inspect`, etc. won't work.
 
-```bash
-# List all networks
-docker network ls
+### What to Run Instead
 
-# Find your project network (usually named after your Dokploy project)
-docker network inspect <network-name> | grep -A5 "Name"
-
-# Or list all containers with their IPs
-docker ps --format "{{.Names}}\t{{.Networks}}"
-```
-
-### Method 2: Docker Compose Service Discovery
-
-In Dokploy, service names in the same project are accessible as:
-- `{service-name}-{component}` (most common)
-- `{project}-{service}-{component}` (if project prefix is used)
-
-**Examples:**
-| If your service name is... | PostgreSQL host | Redis host | Meilisearch host |
-|---------------------------|-----------------|------------|------------------|
-| `infra` | `infra-postgres` | `infra-redis` | `infra-meilisearch` |
-| `medusa-infra` | `medusa-infra-postgres` | `medusa-infra-redis` | `medusa-infra-meilisearch` |
-
-### Method 3: Check Running Containers
+Inside any container, run:
 
 ```bash
-# List all running containers with their hostnames
-docker inspect --format '{{.Name}} -> {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $(docker ps -q)
+# 1. Find this container's hostname
+hostname
+# Output: something like "87adfb3fc351" or "postgres"
+
+# 2. Find all hostnames this container can reach
+cat /etc/hosts
+# Output shows all resolvable hostnames and IPs
+
+# 3. Test if another service is reachable
+ping redis
+ping meilisearch
+ping postgres
+
+# 4. If ping isn't available, test the port directly
+# (from inside the postgres container)
+nc -zv redis 6379
+nc -zv meilisearch 7700
 ```
 
-### Method 4: Test Connectivity
+### Dokploy Hostname Patterns
 
-```bash
-# From inside a running container, test if host is reachable
-docker exec -it <server-container> sh -c "ping infra-postgres"
-docker exec -it <server-container> sh -c "nc -zv infra-postgres 5432"
-```
+Dokploy uses Docker Compose internally. Service names follow these patterns:
+
+| Your Compose Service Name | Likely Hostname |
+|---------------------------|-----------------|
+| `postgres` | `postgres` |
+| `redis` | `redis` |
+| `meilisearch` | `meilisearch` |
+| `medusainfra-postgres` | `medusainfra-postgres` |
+| `medusainfra-redis` | `medusainfra-redis` |
+
+**Always verify with `cat /etc/hosts` and `ping` before deploying!**
 
 ---
 
@@ -233,11 +289,13 @@ docker exec -it <server-container> sh -c "nc -zv infra-postgres 5432"
 
 **Fix:**
 ```bash
-# Find actual container names
-docker ps --format "{{.Names}}"
+# Inside the server container, test:
+ping postgres
+ping redis
+ping meilisearch
 
-# Test connection from server container
-docker exec -it <server-container> sh -c "ping <actual-redis-hostname>"
+# If ping fails, try the full container name:
+ping medusa-js-medusainfra-ubpc7h-postgres-1
 ```
 
 Then update the environment variables with correct hostnames.
@@ -254,10 +312,11 @@ Then redeploy.
 
 **Cause:** Server might be waiting for database to be ready.
 
-**Fix:** Ensure infrastructure is healthy BEFORE deploying server. Check:
+**Fix:** Ensure infrastructure is healthy BEFORE deploying server. Check in Dokploy Docker Terminal:
 ```bash
-docker ps | grep postgres
-# Should show "(healthy)" not "(starting)"
+# Inside postgres container
+pg_isready -U medusa
+# Should show "accepting connections"
 ```
 
 ### 4. Worker Can't Process Jobs
@@ -267,7 +326,8 @@ docker ps | grep postgres
 **Fix:** Ensure worker and server use the EXACT same values for:
 - `JWT_SECRET`
 - `COOKIE_SECRET`
-- `DATABASE_URL` (same PostgreSQL)
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
+- `POSTGRES_HOST`, `REDIS_HOST`, `MEILISEARCH_HOST`
 
 ### 5. Storefront Shows "Connection Refused"
 
@@ -288,6 +348,14 @@ STORE_CORS=https://store.example.com
 ADMIN_CORS=https://admin.example.com
 AUTH_CORS=https://store.example.com,https://admin.example.com
 ```
+
+### 7. Log Tail Error (Cannot Open .log File)
+
+**Cause:** Dokploy platform bug — colon in timestamp creates invalid file path.
+
+**Impact:** None — this is a display issue only. Your deployment is working fine.
+
+**Workaround:** Ignore the error. Check service health via the Containers tab.
 
 ---
 
@@ -328,26 +396,24 @@ store.example.com  → YOUR_SERVER_IP
 │                    Dokploy (Ubuntu/Oracle Cloud)              │
 │                                                              │
 │  ┌──────────────┐ ┌──────────┐ ┌──────────────┐           │
-│  │   infra-     │ │  infra-  │ │   infra-     │           │
 │  │   postgres   │ │  redis   │ │  meilisearch │           │
 │  │   :5432      │ │  :6379   │ │   :7700      │           │
 │  └──────┬───────┘ └────┬─────┘ └──────┬───────┘           │
-│         │               │              │                     │
-│  ┌──────┴───────────────┴──────────────┴───────┐           │
+│         └───────────────┼──────────────┘                    │
+│                         ▼                                    │
+│  ┌──────────────────────────────────────────────┐           │
 │  │              server (:9000)                   │           │
-│  │  MEDUSA_WORKER_MODE=server                   │           │
-│  │  MEDUSA_DISABLE_ADMIN=false                  │           │
+│  │  API + Admin Dashboard + Webhooks            │           │
 │  └──────────────────────┬───────────────────────┘           │
 │                         │                                    │
 │  ┌──────────────────────┴───────────────────────┐           │
 │  │              worker (no port)                  │           │
-│  │  MEDUSA_WORKER_MODE=worker                   │           │
-│  │  MEDUSA_DISABLE_ADMIN=true                   │           │
+│  │  Background jobs, order processing            │           │
 │  └──────────────────────────────────────────────┘           │
 │                                                              │
 │  ┌────────────────────────────────────────────┐             │
-│  │         storefront (:8000 → :3000)          │             │
-│  │  NEXT_PUBLIC_MEDUSA_BACKEND_URL=https://... │             │
+│  │         storefront (:3000)                   │             │
+│  │  Next.js 14 + TailwindCSS                   │             │
 │  └────────────────────────────────────────────┘             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -361,11 +427,11 @@ store.example.com  → YOUR_SERVER_IP
 | `POSTGRES_USER` | PostgreSQL username | `medusa` | ✅ |
 | `POSTGRES_PASSWORD` | PostgreSQL password | `strong_password` | ✅ |
 | `POSTGRES_DB` | Database name | `medusa_store` | ✅ |
-| `POSTGRES_HOST` | PostgreSQL hostname | `infra-postgres` | ✅ |
+| `POSTGRES_HOST` | PostgreSQL hostname | `postgres` | ✅ |
 | `POSTGRES_PORT` | PostgreSQL port | `5432` | Optional |
-| `REDIS_HOST` | Redis hostname | `infra-redis` | ✅ |
+| `REDIS_HOST` | Redis hostname | `redis` | ✅ |
 | `REDIS_PORT` | Redis port | `6379` | Optional |
-| `MEILISEARCH_HOST` | Meilisearch hostname | `infra-meilisearch` | ✅ |
+| `MEILISEARCH_HOST` | Meilisearch hostname | `meilisearch` | ✅ |
 | `MEILISEARCH_PORT` | Meilisearch port | `7700` | Optional |
 | `MEILISEARCH_ADMIN_KEY` | Meilisearch master key | `your_master_key` | ✅ |
 | `JWT_SECRET` | JWT token secret (32+ chars) | `random_string` | ✅ |
