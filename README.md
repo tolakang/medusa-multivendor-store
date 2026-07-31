@@ -1,6 +1,6 @@
 # Medusa 2.0 Multi-Vendor E-Commerce Store
 
-> **Medusa v2** multi-vendor e-commerce platform deployed on **Dokploy** (self-hosted PaaS).
+> **Medusa v2** multi-vendor e-commerce platform deployed on **Dokploy** (self-hosted PaaS on Ubuntu/Oracle Cloud).
 
 ## Architecture
 
@@ -42,42 +42,92 @@
 | Medusa Worker | Custom build | — | Background Jobs |
 | Storefront | Custom build | 3000 | Next.js Storefront |
 
-## Deployment Options
+## Quick Start (5 Steps)
 
-### ⚡ Individual Services (Recommended)
-Faster builds, independent updates. See: [DOKPLOY-DEPLOYMENT.md](./DOKPLOY-DEPLOYMENT.md)
+> **Prerequisites**: Dokploy installed on Ubuntu, domain pointed to your server, Git access to this repo.
 
-```
-Deploy: infra → server → worker + storefront
-```
+### Step 1 — Deploy Infrastructure
 
-### 🐳 Monorepo (All-in-One)
-Single deploy, but slower. See: [DOKPLOY-DEPLOYMENT.md](./DOKPLOY-DEPLOYMENT.md)
+1. In Dokploy → **Docker Compose** → **Create Service**
+2. Name: `medusa-infra`
+3. Upload: `docker-compose.infra.yml`
+4. Set env vars:
+   ```
+   POSTGRES_USER=medusa
+   POSTGRES_PASSWORD=YourStrongPassword123!
+   POSTGRES_DB=medusa_store
+   MEILISEARCH_ADMIN_KEY=YourMeilisearchMasterKey123!
+   ```
+5. Click **Deploy** → Wait 1-2 min for healthy logs
+6. Find hostnames: SSH into server → `docker ps | grep -E "postgres|redis|meilisearch"`
 
-## Quick Start
+### Step 2 — Deploy Server
 
-### Prerequisites
-- Dokploy installed on Ubuntu
-- Domain name pointed to your server
-- Git access to this repository
+1. Docker Compose → **Create Service** → Name: `medusa-server`
+2. Upload: `docker-compose.server.yml`
+3. Set env vars (use hostnames from Step 1):
+   ```
+   DATABASE_URL=postgresql://medusa:YourStrongPassword123!@medusa-infra-postgres:5432/medusa_store
+   REDIS_URL=redis://medusa-infra-redis:6379
+   MEILISEARCH_HOST=http://medusa-infra-meilisearch:7700
+   MEILISEARCH_ADMIN_KEY=YourMeilisearchMasterKey123!
+   JWT_SECRET=<generate-random-32-chars>
+   COOKIE_SECRET=<generate-random-32-chars>
+   MEDUSA_WORKER_MODE=server
+   MEDUSA_DISABLE_ADMIN=false
+   BACKEND_URL=https://api.yourdomain.com
+   STORE_CORS=https://yourdomain.com
+   ADMIN_CORS=https://admin.yourdomain.com
+   AUTH_CORS=https://yourdomain.com,https://admin.yourdomain.com
+   NODE_ENV=production
+   ```
+4. Click **Deploy** → Wait 10-15 min for first build
+5. Add domain: `api.yourdomain.com` → Port 9000 → Enable HTTPS
 
-### Deploy Individual Services
+### Step 3 — Deploy Worker
+
+1. Docker Compose → **Create Service** → Name: `medusa-worker`
+2. Upload: `docker-compose.worker.yml`
+3. Set env vars (SAME secrets as server):
+   ```
+   DATABASE_URL=postgresql://medusa:YourStrongPassword123!@medusa-infra-postgres:5432/medusa_store
+   REDIS_URL=redis://medusa-infra-redis:6379
+   MEILISEARCH_HOST=http://medusa-infra-meilisearch:7700
+   MEILISEARCH_ADMIN_KEY=YourMeilisearchMasterKey123!
+   JWT_SECRET=<SAME as server>
+   COOKIE_SECRET=<SAME as server>
+   MEDUSA_WORKER_MODE=worker
+   MEDUSA_DISABLE_ADMIN=true
+   NODE_ENV=production
+   ```
+4. Click **Deploy** → Wait 5-10 min
+
+### Step 4 — Deploy Storefront
+
+1. Docker Compose → **Create Service** → Name: `medusa-storefront`
+2. Upload: `docker-compose.storefront.yml`
+3. Set env var:
+   ```
+   NEXT_PUBLIC_MEDUSA_BACKEND_URL=https://api.yourdomain.com
+   ```
+4. Click **Deploy** → Wait 5-8 min
+5. Add domain: `yourdomain.com` → Port 3000 → Enable HTTPS
+
+### Step 5 — Create Admin User
+
 ```bash
-# 1. Create 4 Docker Compose services in Dokploy:
-#    - infra  (docker-compose.infra.yml)
-#    - server (docker-compose.server.yml)
-#    - worker (docker-compose.worker.yml)
-#    - storefront (docker-compose.storefront.yml)
-
-# 2. Deploy in order: infra → server → worker + storefront
-
-# 3. Configure domains in Dokploy:
-#    - server:      admin.example.com  → port 9000
-#    - storefront:  store.example.com  → port 3000
-
-# 4. Create admin user:
-docker exec -it <server-container> npx medusa user -e admin@example.com -p password
+# SSH into your server:
+docker exec -it $(docker ps -q -f "name=medusa-server") \
+  pnpm medusa user --email admin@yourdomain.com --password Admin123!
 ```
+
+Login at `https://admin.yourdomain.com`
+
+---
+
+## Detailed Guide
+
+For full environment variable reference, troubleshooting, and build optimization: **[DOKPLOY-DEPLOYMENT.md](./DOKPLOY-DEPLOYMENT.md)**
 
 ## Key Files
 
@@ -94,27 +144,6 @@ docker exec -it <server-container> npx medusa user -e admin@example.com -p passw
 | `apps/backend/medusa-config.ts` | Medusa configuration |
 | `.env.example` | Environment variables template |
 | `DOKPLOY-DEPLOYMENT.md` | Full deployment guide |
-
-## Environment Variables
-
-See [`.env.example`](./.env.example) for all variables. Key ones:
-
-```env
-# Database
-POSTGRES_HOST=infra-postgres
-REDIS_HOST=infra-redis
-MEILISEARCH_HOST=infra-meilisearch
-
-# Medusa
-JWT_SECRET=your_32_char_random_string
-COOKIE_SECRET=your_32_char_random_string
-BACKEND_URL=https://admin.example.com
-MEDUSA_WORKER_MODE=server  # or "worker" for worker service
-
-# CORS
-STORE_CORS=https://store.example.com
-ADMIN_CORS=https://admin.example.com
-```
 
 ## Documentation
 
