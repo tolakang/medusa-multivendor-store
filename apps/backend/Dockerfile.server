@@ -1,33 +1,26 @@
 # =============================================================================
-# Medusa 2.0 Server — API + Admin + Scheduled Jobs (pnpm)
+# Medusa 2.0 Server — API + Admin + Scheduled Jobs
+# Uses pre-built base image if available, otherwise builds deps inline
 # =============================================================================
 FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
+# ---- Phase 1: Install dependencies (cached via BuildKit) ----
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package.json pnpm-lock.yaml* ./
-# Use pnpm install with retry logic for rate-limited environments
-# --frozen-lockfile may fail if no lockfile exists, fallback to plain install
-# --fetch-retries=5 with 60s timeout handles npm 429 rate limits
+# Docker BuildKit caches the pnpm store at /root/.local/share/pnpm/store
+# First build: 10-15 min. Subsequent builds: 30-60s (cache hit).
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-    echo "Installing dependencies with pnpm..." && \
     pnpm install \
       --no-frozen-lockfile \
       --fetch-retries=5 \
       --fetch-retry-mintimeout=60000 \
       --fetch-retry-maxtimeout=120000 \
-      --network-concurrency=4 \
-      || (echo "First attempt failed, retrying in 30s..." && \
-          sleep 30 && \
-          pnpm install \
-            --no-frozen-lockfile \
-            --fetch-retries=5 \
-            --fetch-retry-mintimeout=60000 \
-            --fetch-retry-maxtimeout=120000 \
-            --network-concurrency=4)
+      --network-concurrency=4
 
+# ---- Phase 2: Build application ----
 FROM base AS builder
 WORKDIR /app
 ENV NODE_ENV=development
@@ -36,6 +29,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm run build
 
+# ---- Phase 3: Production runner ----
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production

@@ -84,6 +84,42 @@ Enable "Use HTTPS" (Let's Encrypt).
 
 ---
 
+## Build Optimization
+
+### How Docker Caching Works
+
+The Dockerfiles use a **3-phase build** pattern:
+
+```
+Phase 1 (deps)     → Install ~800 packages (cached by BuildKit)
+Phase 2 (builder)  → Compile TypeScript + medusa build
+Phase 3 (runner)   → Minimal production image
+```
+
+**Docker BuildKit cache mounts** persist the pnpm store across builds on the same machine:
+- First build: **10-15 minutes** (downloading all packages)
+- Subsequent builds: **30-60 seconds** (cache hit, packages already downloaded)
+- After code changes: **3-5 minutes** (skip phase 1, rebuild phases 2-3)
+
+### First Build Optimization
+
+If your first build is slow due to npm rate limiting (429 errors):
+
+1. **Wait and retry** — Rate limits are temporary (usually 10-60 minutes)
+2. **Deploy services sequentially** — Don't build server + worker + storefront simultaneously
+3. **Check Docker cache** — After first successful build, all subsequent builds are fast
+
+### Build Times
+
+| Service | First Build | Cached Build | After Code Change |
+|---------|------------|-------------|-------------------|
+| Infrastructure | 1-2 min | 10-30s | N/A (no build) |
+| Server | 10-15 min | 30-60s | 3-5 min |
+| Worker | 10-15 min | 30-60s | 3-5 min |
+| Storefront | 5-8 min | 30-60s | 2-3 min |
+
+---
+
 ## Environment Variables
 
 ### Infrastructure Variables (for medusa-infra)
@@ -110,7 +146,7 @@ REDIS_URL=redis://medusa-infra-redis:6379
 
 # Meilisearch
 MEILISEARCH_HOST=http://medusa-infra-meilisearch:7700
-MEILISEARCH_API_KEY=your-meilisearch-master-key-here
+MEILISEARCH_ADMIN_KEY=your-meilisearch-master-key-here
 
 # Admin
 MEDUSA_DISABLE_ADMIN=false
@@ -135,23 +171,9 @@ ADMIN_CORS=http://localhost:7001
 
 ```bash
 NEXT_PUBLIC_MEDUSA_BACKEND_URL=https://api.yourdomain.com
-NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY=your-publishable-key-here
 ```
 
 > **Important:** `NEXT_PUBLIC_*` variables are set in `build: args:` because Next.js inlines them at build time.
-
----
-
-## Build Times (Expected)
-
-| Service | First Build | Cached Build |
-|---------|------------|-------------|
-| Infrastructure (postgres/redis/meilisearch) | 1-2 minutes | 10-30 seconds |
-| Medusa Server | 5-15 minutes | 1-3 minutes |
-| Medusa Worker | 5-15 minutes | 1-3 minutes |
-| Storefront | 3-5 minutes | 30-60 seconds |
-
-First builds are slow due to `pnpm install` (downloading + installing ~500-800 packages) and TypeScript compilation. Subsequent builds use Docker cache.
 
 ---
 
@@ -165,12 +187,14 @@ First builds are slow due to `pnpm install` (downloading + installing ~500-800 p
 - Redis URL uses correct hostname
 - PostgreSQL is accepting connections
 
-### Build Fails During npm install
+### Build Fails During pnpm install (429 Rate Limit)
 
-**Symptoms**: E429 (rate limit) or ERESOLVE (peer dep conflict)
-**Fix**: pnpm handles this much better than npm. If it still fails:
-- Check internet connectivity on your server
-- Try again (rate limits are temporary)
+**Symptoms**: `ERR_PNPM_FETCH_429` or `Too Many Requests`
+**Cause**: npm registry rate-limits your server IP
+**Fix**:
+1. Wait 10-60 minutes (rate limits are temporary)
+2. Deploy services one at a time (not simultaneously)
+3. The Dockerfile includes retry logic and reduced concurrency
 
 ### Storefront Shows "Something went wrong"
 
@@ -179,12 +203,6 @@ First builds are slow due to `pnpm install` (downloading + installing ~500-800 p
 - `NEXT_PUBLIC_MEDUSA_BACKEND_URL` is set correctly
 - Server domain has HTTPS enabled
 - CORS is configured properly
-
-### Slow First Deployment
-
-**Symptoms**: Server deployment takes 15+ minutes
-**Cause**: pnpm install downloads all packages from scratch. This is normal.
-**Fix**: Wait for completion. Subsequent deploys will be much faster (1-3 min) due to Docker cache.
 
 ### ts-node Not Found
 
@@ -232,13 +250,12 @@ A  yourdomain.com         → Your Oracle Cloud IP
 | `DATABASE_URL` | Server/Worker | PostgreSQL connection string |
 | `REDIS_URL` | Server/Worker | Redis connection string |
 | `MEILISEARCH_HOST` | Server/Worker | Meilisearch URL |
-| `MEILISEARCH_API_KEY` | Server/Worker | Meilisearch master key |
+| `MEILISEARCH_ADMIN_KEY` | Server/Worker | Meilisearch master key |
 | `JWT_SECRET` | Server/Worker | JWT signing secret |
 | `COOKIE_SECRET` | Server/Worker | Cookie signing secret |
 | `MEDUSA_WORKER_MODE` | Server/Worker | `server`, `worker`, or `shared` |
 | `MEDUSA_DISABLE_ADMIN` | Server | `false` to enable admin |
 | `NEXT_PUBLIC_MEDUSA_BACKEND_URL` | Storefront | Backend API URL (build-time) |
-| `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` | Storefront | API publishable key (build-time) |
 | `POSTGRES_USER` | Infrastructure | PostgreSQL username |
 | `POSTGRES_PASSWORD` | Infrastructure | PostgreSQL password |
 | `POSTGRES_DB` | Infrastructure | Database name |
@@ -328,6 +345,8 @@ Redeploy the single compose service. All services restart.
 ├── docker-compose.server.yml       # Server only
 ├── docker-compose.worker.yml       # Worker only
 ├── docker-compose.storefront.yml   # Storefront only
+├── scripts/
+│   └── build-base-image.sh         # Pre-build base image (optional)
 ├── .env.example
 ├── .dockerignore
 ├── .gitignore

@@ -1,5 +1,5 @@
 # =============================================================================
-# Next.js Storefront (pnpm)
+# Next.js Storefront
 # =============================================================================
 FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -11,21 +11,12 @@ ARG NEXT_PUBLIC_MEDUSA_BACKEND_URL
 ENV NEXT_PUBLIC_MEDUSA_BACKEND_URL=$NEXT_PUBLIC_MEDUSA_BACKEND_URL
 COPY package.json pnpm-lock.yaml* ./
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-    echo "Installing dependencies with pnpm..." && \
     pnpm install \
       --no-frozen-lockfile \
       --fetch-retries=5 \
       --fetch-retry-mintimeout=60000 \
       --fetch-retry-maxtimeout=120000 \
-      --network-concurrency=4 \
-      || (echo "First attempt failed, retrying in 30s..." && \
-          sleep 30 && \
-          pnpm install \
-            --no-frozen-lockfile \
-            --fetch-retries=5 \
-            --fetch-retry-mintimeout=60000 \
-            --fetch-retry-maxtimeout=120000 \
-            --network-concurrency=4)
+      --network-concurrency=4
 
 FROM base AS builder
 WORKDIR /app
