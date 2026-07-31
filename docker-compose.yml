@@ -2,12 +2,12 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
-    ports:
-      - "5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-medusa}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medusa_secret}
       POSTGRES_DB: ${POSTGRES_DB:-medusa_store}
+    ports:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -30,17 +30,17 @@ services:
       retries: 5
 
   meilisearch:
-    image: getmeili/meilisearch:v1.6
+    image: getmeili/meilisearch:v1.12
     restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY:-your_meilisearch_api_key}
+      MEILI_ENV: production
     ports:
       - "7700"
-    environment:
-      MEILI_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:-your_meilisearch_master_key}
-      MEILI_ENV: production
     volumes:
       - meilisearch_data:/meili_data
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--spider", "http://localhost:7700/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=0", "--spider", "http://localhost:7700/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -49,22 +49,22 @@ services:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile
-    image: medusa-backend
     restart: unless-stopped
     ports:
-      - "9000:9000"
+      - "${MEDUSA_PORT:-9000}:9000"
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-medusa}:${POSTGRES_PASSWORD:-medusa_secret}@postgres:5432/${POSTGRES_DB:-medusa_store}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey123}
-      COOKIE_SECRET: ${COOKIE_SECRET:-supersecretcookiekey123}
+      MEILISEARCH_HOST: http://meilisearch:7700
+      MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY:-your_meilisearch_api_key}
+      JWT_SECRET: ${JWT_SECRET:-supersecretjwt123}
+      COOKIE_SECRET: ${COOKIE_SECRET:-supersecretcookie123}
+      WORKER_MODE: server
+      ADMIN_DISABLED: "false"
       STORE_CORS: ${STORE_CORS:-http://localhost:8000}
       ADMIN_CORS: ${ADMIN_CORS:-http://localhost:9000}
       AUTH_CORS: ${AUTH_CORS:-http://localhost:8000,http://localhost:9000}
-      MEILISEARCH_HOST: http://meilisearch:7700
-      MEILISEARCH_API_KEY: ${MEILISEARCH_MASTER_KEY:-your_meilisearch_master_key}
-      MEDUSA_WORKER_MODE: server
     depends_on:
       postgres:
         condition: service_healthy
@@ -73,27 +73,28 @@ services:
       meilisearch:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--spider", "http://localhost:9000/health"]
-      interval: 30s
+      test: ["CMD", "wget", "--no-verbose", "--tries=0", "--spider", "http://localhost:9000/health"]
+      interval: 15s
       timeout: 10s
       retries: 5
-      start_period: 90s
+      start_period: 60s
 
   medusa-worker:
-    image: medusa-backend
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
     restart: unless-stopped
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-medusa}:${POSTGRES_PASSWORD:-medusa_secret}@postgres:5432/${POSTGRES_DB:-medusa_store}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey123}
-      COOKIE_SECRET: ${COOKIE_SECRET:-supersecretcookiekey123}
       MEILISEARCH_HOST: http://meilisearch:7700
-      MEILISEARCH_API_KEY: ${MEILISEARCH_MASTER_KEY:-your_meilisearch_master_key}
-      MEDUSA_WORKER_MODE: worker
+      MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY:-your_meilisearch_api_key}
+      JWT_SECRET: ${JWT_SECRET:-supersecretjwt123}
+      COOKIE_SECRET: ${COOKIE_SECRET:-supersecretcookie123}
+      WORKER_MODE: worker
+      ADMIN_DISABLED: "true"
     depends_on:
-      medusa-server:
-        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
@@ -107,14 +108,20 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${STOREFRONT_PORT:-8000}:3000"
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${NEXT_PUBLIC_MEDUSA_BACKEND_URL:-http://medusa-server:9000}
-      NEXT_PUBLIC_STORE_CORS: ${NEXT_PUBLIC_STORE_CORS:-http://localhost:8000}
+      NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${NEXT_PUBLIC_MEDUSA_BACKEND_URL:-http://localhost:9000}
+      NEXT_PUBLIC_STORE_CORS: ${STORE_CORS:-http://localhost:8000}
+      STORE_NAME: ${STORE_NAME:-Medusa Multi-Vendor Store}
     depends_on:
       medusa-server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=0", "--spider", "http://localhost:3000"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
 
 volumes:
   postgres_data:

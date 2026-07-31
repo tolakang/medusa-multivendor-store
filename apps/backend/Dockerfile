@@ -1,6 +1,6 @@
 FROM node:20-alpine AS base
 
-# Install dependencies only when needed
+# ---- deps stage: install all dependencies ----
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
@@ -20,29 +20,30 @@ RUN npm config set fetch-retries 5 && \
       sleep 60; \
     done
 
-# Rebuild the source code only when needed
+# ---- builder stage: compile medusa ----
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# medusa build creates .medusa/server/ with compiled output
 RUN npm run build
 
-# Production image
+# Install production-only dependencies in the build output directory
+# This is how Medusa v2 production builds work - .medusa/server/ has its own package.json
+RUN cd .medusa/server && npm install --production
+
+# ---- runner stage: production image ----
 FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 medusa
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 medusa
 
-# Copy compiled output, source (needed for API routes/models), config, and dependencies
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/medusa-config.ts ./medusa-config.ts
+# Copy the entire .medusa/server/ build output (contains compiled JS, config, admin, deps)
+COPY --from=builder /app/.medusa/server ./
 
 USER medusa
 
@@ -50,4 +51,5 @@ EXPOSE 9000
 
 ENV PORT=9000
 
-CMD ["npm", "run", "start"]
+# Run database migrations then start the Medusa server
+CMD ["sh", "-c", "npx medusa db:migrate && npx medusa start"]

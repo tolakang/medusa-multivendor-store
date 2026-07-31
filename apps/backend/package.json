@@ -6,9 +6,7 @@
   "scripts": {
     "dev": "medusa develop",
     "build": "medusa build",
-    "start": "medusa start",
-    "start:server": "medusa start",
-    "start:worker": "medusa start",
+    "start": "cd .medusa/server && medusa start",
     "predeploy": "medusa db:migrate && medusa links:sync",
     "migrate": "medusa db:migrate",
     "seed": "medusa seed",
