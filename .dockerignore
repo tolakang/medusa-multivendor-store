@@ -18,3 +18,4 @@ coverage
 Thumbs.db
 uploads
 *.tsbuildinfo
+# Keep .npmrc files for rate-limit configuration

@@ -1,5 +1,5 @@
 # =============================================================================
-# Next.js Storefront
+# Next.js Storefront — Optimized for rate-limited environments
 # =============================================================================
 FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -9,14 +9,26 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 ARG NEXT_PUBLIC_MEDUSA_BACKEND_URL
 ENV NEXT_PUBLIC_MEDUSA_BACKEND_URL=$NEXT_PUBLIC_MEDUSA_BACKEND_URL
-COPY package.json pnpm-lock.yaml* ./
+COPY package.json .npmrc pnpm-lock.yaml* ./
+RUN if [ ! -f pnpm-lock.yaml ]; then echo "No lockfile found — generating..."; pnpm install --no-frozen-lockfile; fi
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    --mount=type=cache,target=/root/.npm \
     pnpm install \
       --no-frozen-lockfile \
-      --fetch-retries=5 \
-      --fetch-retry-mintimeout=60000 \
-      --fetch-retry-maxtimeout=120000 \
-      --network-concurrency=4
+      --prefer-offline \
+      --fetch-retries=10 \
+      --fetch-retry-mintimeout=120000 \
+      --fetch-retry-maxtimeout=600000 \
+      --network-concurrency=2 \
+    || (echo "First attempt failed, waiting 60s before retry..." && \
+        sleep 60 && \
+        pnpm install \
+          --no-frozen-lockfile \
+          --prefer-offline \
+          --fetch-retries=10 \
+          --fetch-retry-mintimeout=120000 \
+          --fetch-retry-maxtimeout=600000 \
+          --network-concurrency=2)
 
 FROM base AS builder
 WORKDIR /app

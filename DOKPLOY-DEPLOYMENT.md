@@ -537,3 +537,158 @@ Phase 3 (runner)   → Minimal production image
 ├── DOKPLOY-DEPLOYMENT.md
 └── README.md
 ```
+
+---
+
+## Fixing npm 429 Rate Limiting (Oracle Cloud)
+
+### Why This Happens
+
+Oracle Cloud free-tier IPs are shared and heavily rate-limited by the npm registry. When Docker builds try to install ~800 Medusa packages, npm returns `429 Too Many Requests` and blocks retries for minutes/hours.
+
+### Solution Overview
+
+There are **3 levels of solutions**, from simplest to most robust:
+
+| Level | Solution | First Build | Subsequent Builds | Effort |
+|-------|----------|-------------|-------------------|--------|
+| 1 | Dockerfile fixes (already applied) | 15-30 min (with retries) | 30-60s | Zero |
+| 2 | Pre-built base image | 15 min (once) | 30-60s | Run script once |
+| 3 | Verdaccio caching proxy | 10-15 min | 30-60s | Install on server |
+
+### Level 1: Dockerfile Fixes (Already Applied)
+
+Your Dockerfiles already include:
+- `--prefer-offline` — use local cache before hitting registry
+- `--fetch-retries=10` with 120s-600s exponential backoff
+- `--network-concurrency=2` — reduce concurrent requests
+- BuildKit cache mounts for pnpm store persistence
+- Shell-level retry (if all retries fail, wait 60s and try again)
+
+**This handles most cases.** If builds still fail with429, proceed to Level 2.
+
+### Level 2: Pre-Build Base Image (Recommended)
+
+Run this **once** on your Oracle Cloud server:
+
+```bash
+# SSH into your server
+ssh ubuntu@your-server-ip
+
+# Clone the repo (or pull latest)
+git clone https://github.com/tolakang/medusa-multivendor-store.git
+cd medusa-multivendor-store
+
+# Build the base image (takes 10-15 min, but only ONCE)
+bash scripts/build-base-image.sh
+```
+
+Then update your Dockerfiles to use the base image:
+
+```dockerfile
+# Change this:
+FROM node:22-alpine AS base
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# To this:
+FROM medusa-backend-base:latest AS base
+```
+
+**Why this works**: The base image has all ~800 npm packages pre-installed. When you redeploy, Docker skips the entire `pnpm install` step because the base image already has everything.
+
+### Level 3: Verdaccio Caching Proxy (Most Robust)
+
+Verdaccio is a local npm registry that caches packages. Once a package is downloaded, it's served from cache — no more network requests to npm.
+
+**Setup on your Oracle Cloud server:**
+
+```bash
+# Install and start Verdaccio
+bash scripts/setup-verdaccio.sh
+```
+
+This will:
+1. Install Node.js (if not present)
+2. Install Verdaccio globally
+3. Start it as a systemd service on port 4873
+4. Show the IP address to use in Dockerfiles
+
+**Then update your `.npmrc` to use Verdaccio:**
+
+```ini
+# In apps/backend/.npmrc and apps/storefront/.npmrc
+registry=http://YOUR_SERVER_IP:4873/
+```
+
+**Or use environment variable in Dockerfile:**
+
+```dockerfile
+ARG NPM_REGISTRY=http://host.docker.internal:4873/
+ENV NPM_CONFIG_REGISTRY=${NPM_REGISTRY}
+```
+
+**For Docker BuildKit on Linux** (Dokploy uses Docker Engine, not Docker Desktop):
+
+```bash
+# Build with host network access:
+docker build --add-host=host.docker.internal:host-gateway \
+  --build-arg NPM_REGISTRY=http://host.docker.internal:4873/ .
+```
+
+Or in docker-compose:
+```yaml
+services:
+  medusa-server:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile.server
+      extra_hosts:
+        - "host.docker.internal:host-gateway"
+      args:
+        NPM_REGISTRY: http://host.docker.internal:4873/
+```
+
+### Understanding the Build Cache
+
+| Scenario | What Happens | Time |
+|----------|-------------|------|
+| **First build ever** | Downloads all packages from npm | 10-15 min |
+| **Redeploy (no code change)** | Uses BuildKit cache mount | 30-60s |
+| **After code change** | Skips phase 1, rebuilds phases 2-3 | 3-5 min |
+| **After base image** | Skips entire pnpm install | 30-60s |
+| **With Verdaccio** | Packages served from local cache | 2-5 min |
+
+### Monitoring Rate Limits
+
+Check if Verdaccio is caching packages:
+```bash
+# On your server:
+curl http://localhost:4873/@medusajs/medusa
+
+# Check Verdaccio storage:
+du -sh /opt/verdaccio/storage/
+```
+
+Check Docker BuildKit cache:
+```bash
+# List cache mounts:
+docker builder du
+
+# Clear cache (if corrupted):
+docker builder prune
+```
+
+### Emergency: Manual Package Download
+
+If all else fails, you can pre-download packages on your LOCAL machine (no rate limits) and upload them:
+
+```bash
+# On your LOCAL machine (not Oracle Cloud):
+mkdir medusa-packages && cd medusa-packages
+npm pack @medusajs/medusa @medusajs/cli @medusajs/framework @medusajs/dashboard @medusajs/utils @rokmohar/medusa-plugin-meilisearch pg dotenv ts-node typescript
+
+# Upload to server:
+scp *.tgz ubuntu@your-server-ip:/tmp/
+
+# On server, extract into a Verdaccio storage or build context
+```

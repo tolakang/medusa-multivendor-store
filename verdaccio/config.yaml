@@ -1,0 +1,59 @@
+# Verdaccio Configuration — Caching proxy for npm registry
+# Reduces 429 rate limiting by caching packages locally
+
+storage: /verdaccio/storage/data
+plugins: /verdaccio/plugins
+
+web:
+  title: "Medusa npm Cache"
+  logo: ""
+
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    timeout: 120s
+    maxage: 10m
+    max_fails: 10
+    fail_timeout: 5m
+    cache: true
+  npm-mirror:
+    url: https://registry.npmmirror.com/
+    timeout: 60s
+    maxage: 10m
+    max_fails: 5
+    fail_timeout: 5m
+    cache: true
+
+packages:
+  "@medusajs/*":
+    access: $anonymous
+    publish: $authenticated
+    unpublish: $authenticated
+    proxy: npmjs
+
+  "@rokmohar/*":
+    access: $anonymous
+    publish: $authenticated
+    unpublish: $authenticated
+    proxy: npmjs
+
+  "**":
+    access: $anonymous
+    publish: $authenticated
+    unpublish: $authenticated
+    proxy: npmjs npm-mirror
+
+server:
+  keepAliveTimeout: 60
+
+middlewares:
+  audit:
+    enabled: true
+
+listen:
+  - 0.0.0.0:4873
+
+log:
+  type: stdout
+  format: pretty
+  level: warn
