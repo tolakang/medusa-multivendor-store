@@ -16,11 +16,11 @@ COPY . .
 
 RUN npm run build
 
-# Production image, copy all the files and run medusa
+# Production image
 FROM base AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
+ENV NODE_ENV=production
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 medusa
@@ -34,6 +34,6 @@ USER medusa
 
 EXPOSE 9000
 
-ENV PORT 9000
+ENV PORT=9000
 
 CMD ["npm", "run", "start"]

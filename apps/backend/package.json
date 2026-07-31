@@ -3,40 +3,25 @@
   "version": "1.0.0",
   "private": true,
   "description": "Medusa 2.0 multi-vendor e-commerce backend",
-  "main": "dist/main.js",
   "scripts": {
     "dev": "medusa develop",
     "build": "medusa build",
     "start": "medusa start",
-    "start:server": "MEDUSA_WORKER_MODE=server medusa start",
-    "start:worker": "MEDUSA_WORKER_MODE=worker medusa start",
+    "start:server": "medusa start",
+    "start:worker": "medusa start",
     "predeploy": "medusa db:migrate && medusa links:sync",
     "migrate": "medusa db:migrate",
     "seed": "medusa seed",
     "test": "jest"
   },
   "dependencies": {
-    "@medusajs/admin": "^7.0.0",
-    "@medusajs/cache-redis": "^1.8.0",
-    "@medusajs/event-bus-redis": "^1.8.0",
-    "@medusajs/file-local": "^1.8.0",
     "@medusajs/medusa": "^2.0.0",
-    "@medusajs/workflow-engine-redis": "^1.8.0",
-    "medusa-fulfillment-manual": "^1.1.38",
-    "medusa-payment-manual": "^1.1.40",
-    "medusa-plugin-meilisearch": "^0.7.0",
-    "dotenv": "^16.0.3",
-    "typeorm": "^0.3.16"
+    "@medusajs/cli": "^2.0.0",
+    "dotenv": "^16.0.3"
   },
   "devDependencies": {
-    "@babel/cli": "^7.14.5",
-    "@babel/core": "^7.14.5",
-    "@babel/preset-env": "^7.14.5",
-    "@babel/preset-typescript": "^7.14.5",
-    "babel-jest": "^27.0.6",
-    "cross-env": "^7.0.3",
-    "jest": "^27.0.6",
-    "typescript": "^4.5.2"
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
   },
   "engines": {
     "node": ">=20.0.0"
