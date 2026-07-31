@@ -17,7 +17,6 @@
     "@medusajs/dashboard": "^2.8.4",
     "@medusajs/framework": "^2.8.4",
     "@medusajs/medusa": "^2.8.4",
-    "@medusajs/medusa-cli": "^1.6.15",
     "@medusajs/utils": "^2.8.4",
     "@rokmohar/medusa-plugin-meilisearch": "^1.4.3",
     "dotenv": "^16.4.7",
