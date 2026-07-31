@@ -19,3 +19,9 @@ services:
       COOKIE_SECRET: ${COOKIE_SECRET:-supersecretcookie123}
       MEDUSA_WORKER_MODE: worker
       MEDUSA_DISABLE_ADMIN: "true"
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "medusa"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 120s

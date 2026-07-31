@@ -28,10 +28,24 @@ RUN npm run build
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+
+# Install curl and nc for health checks and wait logic
+RUN apk add --no-cache curl netcat-openbsd
+
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 medusa
+
+# Copy the entire .medusa/server/ build output
 COPY --from=builder /app/.medusa/server ./
-RUN chown -R medusa:nodejs /app
+
+# Copy the worker start script
+COPY --from=builder /app/src/scripts/start-worker.sh ./start-worker.sh
+RUN chmod +x ./start-worker.sh && chown -R medusa:nodejs /app
+
 USER medusa
-# Worker: no exposed port, no migrations, just start
-CMD ["sh", "-c", "npx medusa start --verbose"]
+
+# Worker: no exposed port
+ENV NODE_ENV=production
+
+# Use the start script which waits for DB before starting
+CMD ["./start-worker.sh"]

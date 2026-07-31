@@ -28,12 +28,25 @@ RUN npm run build
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+
+# Install curl for health checks and nc for port checking
+RUN apk add --no-cache curl netcat-openbsd
+
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 medusa
+
+# Copy the entire .medusa/server/ build output
 COPY --from=builder /app/.medusa/server ./
-RUN chown -R medusa:nodejs /app
+
+# Copy the wait-for-it script
+COPY --from=builder /app/src/scripts/start-server.sh ./start-server.sh
+RUN chmod +x ./start-server.sh && chown -R medusa:nodejs /app
+
 USER medusa
+
 EXPOSE 9000
+
 ENV PORT=9000
-# Server: run migrations then start
-CMD ["sh", "-c", "npx medusa db:migrate && npx medusa start --verbose"]
+
+# Use the start script which waits for DB before running migrations
+CMD ["./start-server.sh"]
