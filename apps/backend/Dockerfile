@@ -2,7 +2,7 @@
 # Medusa 2.0 Multi-Vendor Backend — Production Dockerfile
 # Based on patterns from rpuls/medusajs-2.0-for-railway-boilerplate + official docs
 # =============================================================================
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 
 # ---- deps stage: install ALL dependencies (including dev for build) ----
 FROM base AS deps
