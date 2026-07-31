@@ -1,0 +1,39 @@
+# =============================================================================
+# Medusa 2.0 Server — API + Admin + Scheduled Jobs
+# =============================================================================
+FROM node:20-alpine AS base
+
+FROM base AS deps
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 60000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    for i in 1 2 3 4 5; do \
+      echo "Attempt $i: npm install..." && \
+      npm install && \
+      echo "Attempt $i succeeded" && \
+      break || \
+      echo "Attempt $i failed, waiting 60s before retry..." && \
+      sleep 60; \
+    done
+
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npm run build
+
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 medusa
+COPY --from=builder /app/.medusa/server ./
+RUN chown -R medusa:nodejs /app
+USER medusa
+EXPOSE 9000
+ENV PORT=9000
+# Server: run migrations then start
+CMD ["sh", "-c", "npx medusa db:migrate && npx medusa start --verbose"]

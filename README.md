@@ -1,6 +1,45 @@
 # Medusa 2.0 Multi-Vendor E-Commerce Platform
 
-A complete Medusa 2.0 multi-vendor e-commerce platform deployed with Docker Compose on Dokploy.
+A complete Medusa 2.0 multi-vendor e-commerce platform for deployment on Dokploy.
+
+## Quick Start
+
+### Option A: Individual Services (Recommended)
+
+Deploy each service separately for faster builds and independent updates:
+
+```bash
+# 1. Deploy infrastructure first
+# Use: docker-compose.infra.yml
+
+# 2. Deploy server
+# Use: docker-compose.server.yml
+
+# 3. Deploy worker + storefront (can be parallel)
+# Use: docker-compose.worker.yml + docker-compose.storefront.yml
+```
+
+See [DOKPLOY-DEPLOYMENT.md](./DOKPLOY-DEPLOYMENT.md) for detailed instructions.
+
+### Option B: Monorepo (All-in-One)
+
+Deploy everything at once:
+
+```bash
+docker compose up -d
+```
+
+## Services
+
+| Service | Compose File | Port | Description |
+|---------|-------------|------|-------------|
+| PostgreSQL | `docker-compose.infra.yml` | 5432 | Database |
+| Redis | `docker-compose.infra.yml` | 6379 | Cache & events |
+| Meilisearch | `docker-compose.infra.yml` | 7700 | Product search |
+| Medusa Server | `docker-compose.server.yml` | 9000 | API & admin |
+| Medusa Worker | `docker-compose.worker.yml` | - | Background jobs |
+| Storefront | `docker-compose.storefront.yml` | 8000 | Next.js UI |
+| All Services | `docker-compose.yml` | - | Monorepo deploy |
 
 ## Architecture
 
@@ -10,93 +49,28 @@ A complete Medusa 2.0 multi-vendor e-commerce platform deployed with Docker Comp
 │                                                              │
 │  ┌──────────┐  ┌──────────┐  ┌──────────────┐             │
 │  │ Postgres │  │  Redis   │  │ Meilisearch  │             │
-│  │  :5432   │  │  :6379   │  │    :7700     │             │
 │  └────┬─────┘  └────┬─────┘  └──────┬───────┘             │
 │       │              │               │                       │
 │  ┌────┴──────────────┴───────────────┴───────┐             │
-│  │           Medusa Server (:9000)            │             │
-│  │  - API routes                              │             │
-│  │  - Admin dashboard                         │             │
-│  │  - Scheduled jobs                          │             │
+│  │         Medusa Server (:9000)              │             │
+│  │  WORKER_MODE=server                        │             │
 │  └────────────────────┬───────────────────────┘             │
 │                       │                                      │
 │  ┌────────────────────┴───────────────────────┐             │
-│  │           Medusa Worker (no port)           │             │
-│  │  - Background jobs                          │             │
-│  │  - Event processing                         │             │
+│  │         Medusa Worker (no port)             │             │
+│  │  WORKER_MODE=worker                        │             │
 │  └────────────────────────────────────────────┘             │
 │                                                              │
 │  ┌────────────────────────────────────────────┐             │
-│  │         Next.js Storefront (:8000)          │             │
-│  │  - Product browsing                         │             │
-│  │  - Cart & checkout                          │             │
-│  │  - Customer accounts                        │             │
+│  │       Next.js Storefront (:8000)            │             │
 │  └────────────────────────────────────────────┘             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Services
-
-| Service | Port | Description |
-|---------|------|-------------|
-| PostgreSQL | 5432 | Database |
-| Redis | 6379 | Cache & event bus |
-| Meilisearch | 7700 | Product search |
-| Medusa Server | 9000 | API & admin |
-| Medusa Worker | - | Background jobs |
-| Next.js Storefront | 8000 | Customer-facing UI |
-
-## Quick Start
-
-### 1. Clone Repository
-
-```bash
-git clone https://github.com/tolakang/medusa-multivendor-store.git
-cd medusa-multivendor-store
-```
-
-### 2. Configure Environment
-
-```bash
-cp .env.example .env
-# Edit .env with your values
-```
-
-### 3. Deploy with Docker Compose
-
-```bash
-docker compose up -d
-```
-
-### 4. Create Admin User
-
-```bash
-docker compose exec medusa-server npx medusa user -e admin@yourdomain.com -p password
-```
-
-### 5. Access Services
-
-- **Storefront**: http://localhost:8000
-- **Admin**: http://localhost:9000
-- **API**: http://localhost:9000
-
-## Dokploy Deployment
-
-See [DOKPLOY-DEPLOYMENT.md](./DOKPLOY-DEPLOYMENT.md) for detailed deployment instructions.
-
-### Quick Dokploy Setup
-
-1. Push to GitHub
-2. Create Docker Compose service in Dokploy
-3. Set build context: `./`
-4. Set compose file: `./docker-compose.yml`
-5. Configure environment variables
-6. Deploy
-
 ## Development
 
 ```bash
-# Start all services
+# Start all services locally
 docker compose up -d
 
 # View logs
@@ -114,66 +88,29 @@ docker compose up -d --build
 ```
 medusa-multivendor-store/
 ├── apps/
-│   ├── backend/           # Medusa 2.0 server
-│   │   ├── src/           # Source code
-│   │   ├── Dockerfile     # Multi-stage build
-│   │   ├── package.json   # Dependencies
-│   │   └── medusa-config.ts  # Configuration
-│   └── storefront/        # Next.js storefront
-│       ├── src/           # Source code
-│       ├── Dockerfile     # Multi-stage build
-│       └── package.json   # Dependencies
-├── docker-compose.yml     # Service orchestration
-├── .env.example           # Environment template
-└── DOKPLOY-DEPLOYMENT.md  # Deployment guide
+│   ├── backend/
+│   │   ├── Dockerfile.server    # Server-specific build
+│   │   ├── Dockerfile.worker    # Worker-specific build
+│   │   ├── Dockerfile           # Generic build (monorepo)
+│   │   ├── src/                 # Source code
+│   │   ├── package.json
+│   │   └── medusa-config.ts
+│   └── storefront/
+│       ├── Dockerfile
+│       ├── src/
+│       └── package.json
+├── docker-compose.yml           # All-in-one
+├── docker-compose.infra.yml     # PostgreSQL, Redis, Meilisearch
+├── docker-compose.server.yml    # Medusa Server
+├── docker-compose.worker.yml    # Medusa Worker
+├── docker-compose.storefront.yml # Storefront
+├── .env.example                 # Environment template
+└── DOKPLOY-DEPLOYMENT.md        # Deployment guide
 ```
 
 ## Environment Variables
 
 See `.env.example` for all required variables.
-
-### Key Variables
-
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `REDIS_URL` | Redis connection string |
-| `MEILISEARCH_HOST` | Meilisearch URL |
-| `WORKER_MODE` | `server`, `worker`, or `shared` |
-| `STORE_CORS` | Storefront origin |
-| `ADMIN_CORS` | Admin dashboard origin |
-
-## Troubleshooting
-
-### Build Fails
-
-```bash
-# Clear Docker cache
-docker builder prune -af
-
-# Rebuild without cache
-docker compose up -d --build --force-recreate
-```
-
-### Service Won't Start
-
-```bash
-# Check logs
-docker compose logs <service-name>
-
-# Check health
-docker compose ps
-```
-
-### Database Issues
-
-```bash
-# Run migrations
-docker compose exec medusa-server npx medusa db:migrate
-
-# Reset database
-docker compose exec postgres psql -U medusa -d medusa_store -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
-```
 
 ## License
 

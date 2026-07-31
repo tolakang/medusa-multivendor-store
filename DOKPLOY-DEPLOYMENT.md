@@ -1,107 +1,184 @@
 # Dokploy Deployment Guide — Medusa 2.0 Multi-Vendor Store
 
-## Architecture
+## Two Deployment Options
+
+### Option A: Individual Services (Recommended for Dokploy)
+Deploy each service separately for faster builds and independent updates.
+
+### Option B: Monorepo (All-in-One)
+Deploy everything in a single Docker Compose. Slower but simpler.
+
+---
+
+## Option A: Individual Services (Recommended)
+
+### Deployment Order
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Dokploy (Ubuntu/Oracle Cloud)              │
-│                                                              │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────┐             │
-│  │ Postgres │  │  Redis   │  │ Meilisearch  │             │
-│  │  :5432   │  │  :6379   │  │    :7700     │             │
-│  └────┬─────┘  └────┬─────┘  └──────┬───────┘             │
-│       │              │               │                       │
-│  ┌────┴──────────────┴───────────────┴───────┐             │
-│  │         Medusa Server (:9000)              │             │
-│  │  - API routes    - Admin dashboard         │             │
-│  │  - Scheduled jobs - WORKER_MODE=server     │             │
-│  └────────────────────┬───────────────────────┘             │
-│                       │                                      │
-│  ┌────────────────────┴───────────────────────┐             │
-│  │         Medusa Worker (no port)             │             │
-│  │  - Background jobs    - Event processing    │             │
-│  │  - WORKER_MODE=worker                       │             │
-│  └────────────────────────────────────────────┘             │
-│                                                              │
-│  ┌────────────────────────────────────────────┐             │
-│  │       Next.js Storefront (:8000)            │             │
-│  │  - Product browsing   - Cart & checkout     │             │
-│  │  - Customer accounts                        │             │
-│  └────────────────────────────────────────────┘             │
-└─────────────────────────────────────────────────────────────┘
+1. Infrastructure (PostgreSQL, Redis, Meilisearch)
+         ↓
+2. Medusa Server (API + Admin)
+         ↓
+3. Medusa Worker (Background Jobs)
+4. Storefront (Next.js)  ← can deploy in parallel with worker
 ```
 
-## Quick Start
+### Step 1: Deploy Infrastructure
 
-### 1. Push to GitHub
-
-```bash
-git add -A
-git commit -m "Deploy to Dokploy"
-git push origin main
-```
-
-### 2. Create Docker Compose Service in Dokploy
-
-1. Go to **Dokploy Dashboard** → **Projects** → Create/Select Project
-2. Click **Create Service** → **Docker Compose**
-3. Set:
-   - **Service Name**: `medusa-store`
-   - **Git Repository**: `https://github.com/tolakang/medusa-multivendor-store.git`
-   - **Branch**: `main`
-   - **Build Context**: `./`
-   - **Compose File**: `./docker-compose.yml`
-
-### 3. Configure Environment Variables
-
-Set these in the Dokploy service **Environment** tab:
+1. **Dokploy** → Create Service → **Docker Compose**
+2. Service Name: `medusa-infra`
+3. Git Repository: `https://github.com/tolakang/medusa-multivendor-store.git`
+4. Branch: `main`
+5. Build Context: `./`
+6. Compose File: `./docker-compose.infra.yml`
+7. Set environment variables:
 
 ```env
-# Database
 POSTGRES_USER=medusa
-POSTGRES_PASSWORD=your_strong_password_here
+POSTGRES_PASSWORD=your_strong_password
 POSTGRES_DB=medusa_store
+MEILISEARCH_ADMIN_KEY=your_meilisearch_master_key
+```
+
+8. **Deploy** and wait for all 3 services to be healthy
+
+### Step 2: Deploy Medusa Server
+
+1. **Dokploy** → Create Service → **Docker Compose**
+2. Service Name: `medusa-server`
+3. Compose File: `./docker-compose.server.yml`
+4. Set environment variables:
+
+```env
+# Database (must match infrastructure)
+POSTGRES_USER=medusa
+POSTGRES_PASSWORD=your_strong_password
+POSTGRES_DB=medusa_store
+POSTGRES_HOST=medusa-infra-postgres
+POSTGRES_PORT=5432
 
 # Redis
-REDIS_URL=redis://redis:6379
+REDIS_HOST=medusa-infra-redis
+REDIS_PORT=6379
 
 # Meilisearch
-MEILISEARCH_HOST=http://meilisearch:7700
+MEILISEARCH_HOST=medusa-infra-meilisearch
+MEILISEARCH_PORT=7700
 MEILISEARCH_ADMIN_KEY=your_meilisearch_master_key
 
-# Medusa Server
+# Medusa
 JWT_SECRET=your_random_32_char_string
 COOKIE_SECRET=another_random_32_char_string
-BACKEND_URL=https://your-backend-domain.com
+BACKEND_URL=https://your-admin-domain.com
 MEDUSA_WORKER_MODE=server
 MEDUSA_DISABLE_ADMIN=false
 
-# CORS (set to your actual domains)
+# CORS
 STORE_CORS=https://your-storefront-domain.com
 ADMIN_CORS=https://your-admin-domain.com
 AUTH_CORS=https://your-storefront-domain.com,https://your-admin-domain.com
 ```
 
-### 4. Configure Domains
+5. **Deploy** and wait for health check to pass
 
-In Dokploy, go to **Domains** tab and add:
+### Step 3: Deploy Medusa Worker
 
-| Service | Domain | Port | Internal Port |
-|---------|--------|------|---------------|
-| medusa-server | your-admin-domain.com | 443/80 | 9000 |
-| medusa-storefront | your-storefront-domain.com | 443/80 | 3000 |
+1. **Dokploy** → Create Service → **Docker Compose**
+2. Service Name: `medusa-worker`
+3. Compose File: `./docker-compose.worker.yml`
+4. Set environment variables (same database/redis/meilisearch as server):
 
-### 5. Deploy
-
-Click **Deploy** in Dokploy.
-
-### 6. Create Admin User
-
-After deployment, run in Dokploy terminal:
-
-```bash
-docker compose exec medusa-server npx medusa user -e admin@yourdomain.com -p password
+```env
+POSTGRES_USER=medusa
+POSTGRES_PASSWORD=your_strong_password
+POSTGRES_DB=medusa_store
+POSTGRES_HOST=medusa-infra-postgres
+POSTGRES_PORT=5432
+REDIS_HOST=medusa-infra-redis
+REDIS_PORT=6379
+MEILISEARCH_HOST=medusa-infra-meilisearch
+MEILISEARCH_PORT=7700
+MEILISEARCH_ADMIN_KEY=your_meilisearch_master_key
+JWT_SECRET=your_random_32_char_string
+COOKIE_SECRET=another_random_32_char_string
+MEDUSA_WORKER_MODE=worker
+MEDUSA_DISABLE_ADMIN=true
 ```
+
+5. **Deploy**
+
+### Step 4: Deploy Storefront
+
+1. **Dokploy** → Create Service → **Docker Compose**
+2. Service Name: `medusa-storefront`
+3. Compose File: `./docker-compose.storefront.yml`
+4. Set environment variables:
+
+```env
+NEXT_PUBLIC_MEDUSA_BACKEND_URL=https://your-admin-domain.com
+NEXT_PUBLIC_BASE_URL=https://your-storefront-domain.com
+STORE_NAME=Medusa Multi-Vendor Store
+```
+
+5. **Deploy**
+
+### Step 5: Configure Domains
+
+In Dokploy **Domains** tab for each service:
+
+| Service | Domain | Internal Port |
+|---------|--------|---------------|
+| medusa-server | admin.example.com | 9000 |
+| medusa-storefront | store.example.com | 3000 |
+
+### Step 6: Create Admin User
+
+In Dokploy terminal:
+```bash
+docker compose exec medusa-server npx medusa user -e admin@example.com -p password
+```
+
+---
+
+## Option B: Monorepo (All-in-One)
+
+### Quick Deploy
+
+1. **Dokploy** → Create Service → **Docker Compose**
+2. Service Name: `medusa-store`
+3. Compose File: `./docker-compose.yml`
+4. Set all environment variables (see `.env.example`)
+5. **Deploy**
+
+---
+
+## Service Communication
+
+When using individual services, they communicate via Docker networking:
+
+```
+┌─────────────────────────────────────────────────┐
+│              Dokploy Project Network              │
+│                                                   │
+│  medusa-infra-postgres ←─── medusa-server         │
+│  medusa-infra-redis   ←─── medusa-server         │
+│  medusa-infra-meilisearch ← medusa-server        │
+│                                                   │
+│  medusa-infra-postgres ←─── medusa-worker         │
+│  medusa-infra-redis   ←─── medusa-worker         │
+│  medusa-infra-meilisearch ← medusa-worker        │
+│                                                   │
+│  medusa-server ←───────── medusa-storefront       │
+└─────────────────────────────────────────────────┘
+```
+
+**Important:** Service names in Dokploy follow the pattern:
+- `{project-name}-{service-name}-{component}`
+- Example: If project is `medusa` and service is `medusa-infra`, the PostgreSQL host is `medusa-medusa-infra-postgres`
+
+Check actual service names in Dokploy's **Docker** → **Containers** tab.
+
+---
 
 ## Environment Variables Reference
 
@@ -109,9 +186,10 @@ docker compose exec medusa-server npx medusa user -e admin@yourdomain.com -p pas
 |----------|-------------|---------|
 | `POSTGRES_USER` | PostgreSQL username | `medusa` |
 | `POSTGRES_PASSWORD` | PostgreSQL password | `strong_password` |
-| `POSTGRES_DB` | PostgreSQL database name | `medusa_store` |
-| `REDIS_URL` | Redis connection URL | `redis://redis:6379` |
-| `MEILISEARCH_HOST` | Meilisearch URL | `http://meilisearch:7700` |
+| `POSTGRES_DB` | Database name | `medusa_store` |
+| `POSTGRES_HOST` | PostgreSQL host | `medusa-infra-postgres` |
+| `REDIS_HOST` | Redis host | `medusa-infra-redis` |
+| `MEILISEARCH_HOST` | Meilisearch host | `medusa-infra-meilisearch` |
 | `MEILISEARCH_ADMIN_KEY` | Meilisearch master key | `your_master_key` |
 | `JWT_SECRET` | JWT token secret | `random_32_chars` |
 | `COOKIE_SECRET` | Cookie signing secret | `random_32_chars` |
@@ -122,54 +200,36 @@ docker compose exec medusa-server npx medusa user -e admin@yourdomain.com -p pas
 | `ADMIN_CORS` | Admin dashboard origin | `https://admin.example.com` |
 | `AUTH_CORS` | Auth endpoints origin | Both domains comma-separated |
 
-## CORS Configuration
-
-When you have custom domains, update CORS to match:
-
-```env
-STORE_CORS=https://your-storefront.com
-ADMIN_CORS=https://your-admin.com
-AUTH_CORS=https://your-storefront.com,https://your-admin.com
-```
+---
 
 ## Troubleshooting
 
-### Build Fails with node_modules Error
+### Individual Services Can't Connect
+
+1. Check all services are in the same Dokploy project
+2. Verify service names in Docker Containers tab
+3. Use correct host format: `{project}-{service}-{component}`
+
+### Build Fails
 
 ```bash
-# Clear Docker build cache in Dokploy
+# In Dokploy terminal
 docker builder prune -af
 ```
 
-### Services Won't Start
+### Server Won't Start
 
 ```bash
-# Check logs
-docker compose logs medusa-server
-docker compose logs medusa-worker
+# Check if infrastructure is healthy
+docker compose -f docker-compose.infra.yml ps
+
+# Check server logs
+docker compose -f docker-compose.server.yml logs medusa-server
 ```
 
-### Database Connection Issues
+### Worker Can't Connect to Server
 
-Ensure PostgreSQL is healthy before server starts:
-```bash
-docker compose ps postgres
-```
-
-### Meilisearch Connection Issues
-
-Check Meilisearch health:
-```bash
-docker compose exec meilisearch wget -qO- http://localhost:7700/health
-```
-
-## Production Checklist
-
-- [ ] Set strong `JWT_SECRET` and `COOKIE_SECRET`
-- [ ] Set strong `POSTGRES_PASSWORD`
-- [ ] Set strong `MEILISEARCH_ADMIN_KEY`
-- [ ] Configure CORS with actual domains
-- [ ] Set `BACKEND_URL` to your backend domain
-- [ ] Create admin user after first deploy
-- [ ] Test storefront ↔ server connectivity
-- [ ] Verify Meilisearch indexing works
+Worker doesn't connect to server directly — they share the same database and Redis. Ensure:
+- Same `DATABASE_URL`
+- Same `REDIS_URL`
+- Same `JWT_SECRET` and `COOKIE_SECRET`
