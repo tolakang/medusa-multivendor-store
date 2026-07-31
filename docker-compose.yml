@@ -12,31 +12,28 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-medusa}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medusa_secret}
       POSTGRES_DB: ${POSTGRES_DB:-medusa_store}
-    ports:
-      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medusa}"]
-      interval: 30s
+      interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 10s
 
   # ---- Redis ----
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379"
+    command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
+      interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 10s
 
   # ---- Meilisearch ----
   meilisearch:
@@ -45,16 +42,14 @@ services:
     environment:
       MEILI_MASTER_KEY: ${MEILISEARCH_ADMIN_KEY:-change_me_master_key}
       MEILI_ENV: production
-    ports:
-      - "7700"
     volumes:
       - meilisearch_data:/meili_data
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=0", "--spider", "http://localhost:7700/health"]
-      interval: 30s
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7700/health"]
+      interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 10s
 
   # ---- Medusa Server (API + Admin + Scheduled Jobs) ----
   medusa-server:
@@ -115,6 +110,12 @@ services:
         condition: service_healthy
       meilisearch:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "medusa"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
 
   # ---- Next.js Storefront ----
   medusa-storefront:
@@ -123,23 +124,16 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${NEXT_PUBLIC_MEDUSA_BACKEND_URL:-http://localhost:9000}
-        NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-http://localhost:8000}
-        NEXT_PUBLIC_STORE_CORS: ${STORE_CORS:-http://localhost:8000}
-        STORE_NAME: ${STORE_NAME:-Medusa Multi-Vendor Store}
     restart: unless-stopped
     ports:
       - "${STOREFRONT_PORT:-8000}:3000"
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${NEXT_PUBLIC_MEDUSA_BACKEND_URL:-http://localhost:9000}
-      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-http://localhost:8000}
-      NEXT_PUBLIC_STORE_CORS: ${STORE_CORS:-http://localhost:8000}
-      STORE_NAME: ${STORE_NAME:-Medusa Multi-Vendor Store}
     depends_on:
       medusa-server:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=0", "--spider", "http://localhost:3000"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3

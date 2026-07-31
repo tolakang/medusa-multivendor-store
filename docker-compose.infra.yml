@@ -2,6 +2,9 @@
 # Infrastructure Services — PostgreSQL, Redis, Meilisearch
 # Deploy this FIRST in Dokploy
 # =============================================================================
+# NOTE: Ports are NOT exposed to the host for security.
+# Services are only accessible from within the Docker network.
+# To connect from outside, use Dokploy's domain routing.
 
 services:
   postgres:
@@ -11,8 +14,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-medusa}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medusa_secret}
       POSTGRES_DB: ${POSTGRES_DB:-medusa_store}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,12 +21,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
     healthcheck:
@@ -33,6 +34,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   meilisearch:
     image: getmeili/meilisearch:v1.12
@@ -40,15 +42,14 @@ services:
     environment:
       MEILI_MASTER_KEY: ${MEILISEARCH_ADMIN_KEY:-change_me_master_key}
       MEILI_ENV: production
-    ports:
-      - "${MEILISEARCH_PORT:-7700}:7700"
     volumes:
       - meilisearch_data:/meili_data
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=0", "--spider", "http://localhost:7700/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7700/health"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
 volumes:
   postgres_data:
