@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
       --fetch-retries=10 \
       --fetch-retry-mintimeout=120000 \
       --fetch-retry-maxtimeout=600000 \
-      --network-concurrency=2 \
+      --network-concurrency=2 --fetch-retry-factor=2 \
     || (echo "First attempt failed, waiting 120s before retry..." && \
         sleep 120 && \
         pnpm install \
@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
           --fetch-retries=10 \
           --fetch-retry-mintimeout=120000 \
           --fetch-retry-maxtimeout=600000 \
-          --network-concurrency=2))
+          --network-concurrency=2 --fetch-retry-factor=2))
 
 FROM base AS builder
 WORKDIR /app

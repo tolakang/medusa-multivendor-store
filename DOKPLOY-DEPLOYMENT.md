@@ -13,7 +13,52 @@ Both **monorepo** (all services in one compose) and **individual services** (sep
 
 Deploy 4 separate Docker Compose services in order. Each service is independent and can be updated separately.
 
-**Deploy order**: infra → server → worker + storefront
+**Deploy order**: preflight → infra → server → worker + storefront
+
+---
+
+### Step 0: Generate Lockfiles (CRITICAL — Do This First!)
+
+**This step prevents the `429 Too Many Requests` error that blocks Docker builds on Oracle Cloud.**
+
+Without a `pnpm-lock.yaml`, every Docker build resolves all ~800 Medusa packages from scratch, triggering npm rate limits on cloud IPs. Generating lockfiles **once** fixes this permanently.
+
+#### 0.1 SSH into your Oracle Cloud server
+
+```bash
+ssh ubuntu@your-server-ip
+```
+
+#### 0.2 Clone the repo (if not already)
+
+```bash
+git clone https://github.com/tolakang/medusa-multivendor-store.git
+cd medusa-multivendor-store
+```
+
+#### 0.3 Generate lockfiles using Docker
+
+```bash
+bash scripts/generate-lockfile.sh
+```
+
+This runs `pnpm install --lockfile-only` inside Docker containers to create:
+- `apps/backend/pnpm-lock.yaml`
+- `apps/storefront/pnpm-lock.yaml`
+
+> ⏱️ This takes **3-5 minutes** (just resolving versions, not downloading packages).
+
+#### 0.4 Commit and push the lockfiles
+
+```bash
+git add apps/backend/pnpm-lock.yaml apps/storefront/pnpm-lock.yaml
+git commit -m "Add pnpm lockfiles to prevent npm 429 rate limiting"
+git push origin main
+```
+
+> ⚠️ **DO NOT SKIP THIS STEP.** Without lockfiles, Docker builds WILL fail with 429 on Oracle Cloud IPs.
+
+> 💡 **Lockfiles are stable.** They only change when you update `package.json`. Future Medusa updates will auto-merge lockfile conflicts.
 
 ---
 
@@ -475,7 +520,10 @@ Phase 3 (runner)   → Minimal production image
 
 ### Build Fails with 429 Rate Limit
 **Symptoms**: `ERR_PNPM_FETCH_429` or `Too Many Requests`
-**Fix**: Wait 10-60 min, deploy one service at a time.
+**Fix**:
+1. **First**: Make sure you completed **Step 0** (generate lockfiles). This is the #1 cause.
+2. **If lockfiles exist**: Wait 10-60 min, deploy one service at a time.
+3. **If still failing**: Use Level 2 or 3 solutions in the 429 section below.
 
 ### ts-node Not Found
 **Symptoms**: "Cannot find module ts-node"
@@ -556,16 +604,18 @@ There are **3 levels of solutions**, from simplest to most robust:
 | 2 | Pre-built base image | 15 min (once) | 30-60s | Run script once |
 | 3 | Verdaccio caching proxy | 10-15 min | 30-60s | Install on server |
 
-### Level 1: Dockerfile Fixes (Already Applied)
+### Level 1: Lockfiles + Dockerfile Fixes (Do This First!)
 
-Your Dockerfiles already include:
+**The #1 fix: Generate and commit `pnpm-lock.yaml` files** (Step 0 above). With a lockfile, pnpm only downloads specific versions instead of resolving all ~800 packages from scratch.
+
+Your Dockerfiles also include:
 - `--prefer-offline` — use local cache before hitting registry
 - `--fetch-retries=10` with 120s-600s exponential backoff
 - `--network-concurrency=2` — reduce concurrent requests
 - BuildKit cache mounts for pnpm store persistence
-- Shell-level retry (if all retries fail, wait 60s and try again)
+- Shell-level retry (if all retries fail, wait 120s and try again)
 
-**This handles most cases.** If builds still fail with429, proceed to Level 2.
+**This handles most cases.** If builds still fail with 429, proceed to Level 2.
 
 ### Level 2: Pre-Build Base Image (Recommended)
 
@@ -652,7 +702,8 @@ services:
 
 | Scenario | What Happens | Time |
 |----------|-------------|------|
-| **First build ever** | Downloads all packages from npm | 10-15 min |
+| **First build with lockfile** | Downloads specific packages only | 3-5 min |
+| **First build WITHOUT lockfile** | Resolves + downloads ALL packages | 10-15 min |
 | **Redeploy (no code change)** | Uses BuildKit cache mount | 30-60s |
 | **After code change** | Skips phase 1, rebuilds phases 2-3 | 3-5 min |
 | **After base image** | Skips entire pnpm install | 30-60s |
