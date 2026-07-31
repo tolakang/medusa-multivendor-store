@@ -9,25 +9,24 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package.json .npmrc pnpm-lock.yaml* ./
-RUN if [ ! -f pnpm-lock.yaml ]; then echo "No lockfile found — generating..."; pnpm install --no-frozen-lockfile; fi
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     --mount=type=cache,target=/root/.npm \
-    pnpm install \
+    (pnpm install \
       --no-frozen-lockfile \
       --prefer-offline \
       --fetch-retries=10 \
       --fetch-retry-mintimeout=120000 \
       --fetch-retry-maxtimeout=600000 \
       --network-concurrency=2 \
-    || (echo "First attempt failed, waiting 60s before retry..." && \
-        sleep 60 && \
+    || (echo "First attempt failed, waiting 120s before retry..." && \
+        sleep 120 && \
         pnpm install \
           --no-frozen-lockfile \
           --prefer-offline \
           --fetch-retries=10 \
           --fetch-retry-mintimeout=120000 \
           --fetch-retry-maxtimeout=600000 \
-          --network-concurrency=2)
+          --network-concurrency=2))
 
 FROM base AS builder
 WORKDIR /app

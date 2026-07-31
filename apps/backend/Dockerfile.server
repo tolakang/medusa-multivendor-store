@@ -10,27 +10,29 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package.json .npmrc pnpm-lock.yaml* ./
-# Generate lockfile if missing (critical for avoiding 429 on rebuilds)
-RUN if [ ! -f pnpm-lock.yaml ]; then echo "No lockfile found — generating..."; pnpm install --no-frozen-lockfile; fi
-# Install with aggressive retry for rate-limited environments
+# Install dependencies with aggressive retry for rate-limited environments
+# --prefer-offline: use local cache before hitting registry
+# --no-frozen-lockfile: generate lockfile if missing
+# --network-concurrency=2: reduce concurrent requests to avoid 429
+# Cache mounts persist pnpm store across builds (first build: 10-15min, cached: 30-60s)
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     --mount=type=cache,target=/root/.npm \
-    pnpm install \
+    (pnpm install \
       --no-frozen-lockfile \
       --prefer-offline \
       --fetch-retries=10 \
       --fetch-retry-mintimeout=120000 \
       --fetch-retry-maxtimeout=600000 \
       --network-concurrency=2 \
-    || (echo "First attempt failed, waiting 60s before retry..." && \
-        sleep 60 && \
+    || (echo "First attempt failed, waiting 120s before retry..." && \
+        sleep 120 && \
         pnpm install \
           --no-frozen-lockfile \
           --prefer-offline \
           --fetch-retries=10 \
           --fetch-retry-mintimeout=120000 \
           --fetch-retry-maxtimeout=600000 \
-          --network-concurrency=2)
+          --network-concurrency=2))
 
 # ---- Phase 2: Build application ----
 FROM base AS builder
