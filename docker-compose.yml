@@ -1,34 +1,28 @@
 services:
   postgres:
-    image: postgres:15-alpine
-    container_name: medusa-postgres
+    image: postgres:16-alpine
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-medusa}
-      POSTGRES_DB: ${POSTGRES_DB:-medusa-store}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medusa-secret-pw}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medusa_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-medusa_store}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - medusa-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medusa} -d ${POSTGRES_DB:-medusa-store}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medusa}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: medusa-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6379"
     volumes:
       - redis_data:/data
-    networks:
-      - medusa-net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -36,20 +30,17 @@ services:
       retries: 5
 
   meilisearch:
-    image: getmeili/meilisearch:latest
-    container_name: medusa-meilisearch
+    image: getmeili/meilisearch:v1.6
     restart: unless-stopped
     ports:
-      - "7700:7700"
-    volumes:
-      - meilisearch_data:/meilisearch/data
+      - "7700"
     environment:
-      MEILI_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:-your-meilisearch-master-key-change-me}
+      MEILI_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:-your_meilisearch_master_key}
       MEILI_ENV: production
-    networks:
-      - medusa-net
+    volumes:
+      - meilisearch_data:/meili_data
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7700/health"]
+      test: ["CMD", "wget", "--no-verbose", "--spider", "http://localhost:7700/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -58,25 +49,21 @@ services:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile
-    image: medusa-backend
-    container_name: medusa-server
     restart: unless-stopped
     ports:
       - "9000:9000"
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://${POSTGRES_USER:-medusa}:${POSTGRES_PASSWORD:-medusa-secret-pw}@postgres:5432/${POSTGRES_DB:-medusa-store}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-medusa}:${POSTGRES_PASSWORD:-medusa_secret}@postgres:5432/${POSTGRES_DB:-medusa_store}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-me}
-      COOKIE_SECRET: ${COOKIE_SECRET:-your-super-secret-cookie-key-change-me}
-      MEDUSA_WORKER_MODE: server
-      DISABLE_MEDUSA_ADMIN: "false"
+      JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey123}
+      COOKIE_SECRET: ${COOKIE_SECRET:-supersecretcookiekey123}
       STORE_CORS: ${STORE_CORS:-http://localhost:8000}
       ADMIN_CORS: ${ADMIN_CORS:-http://localhost:9000}
       AUTH_CORS: ${AUTH_CORS:-http://localhost:8000,http://localhost:9000}
       MEILISEARCH_HOST: http://meilisearch:7700
-      MEILISEARCH_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:-your-meilisearch-master-key-change-me}
-      PORT: "9000"
+      MEILISEARCH_API_KEY: ${MEILISEARCH_MASTER_KEY:-your_meilisearch_master_key}
+      MEDUSA_WORKER_MODE: server
     depends_on:
       postgres:
         condition: service_healthy
@@ -84,26 +71,27 @@ services:
         condition: service_healthy
       meilisearch:
         condition: service_healthy
-    networks:
-      - medusa-net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--spider", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
 
   medusa-worker:
-    image: medusa-backend
-    container_name: medusa-worker
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://${POSTGRES_USER:-medusa}:${POSTGRES_PASSWORD:-medusa-secret-pw}@postgres:5432/${POSTGRES_DB:-medusa-store}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-medusa}:${POSTGRES_PASSWORD:-medusa_secret}@postgres:5432/${POSTGRES_DB:-medusa_store}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-me}
-      COOKIE_SECRET: ${COOKIE_SECRET:-your-super-secret-cookie-key-change-me}
-      MEDUSA_WORKER_MODE: worker
-      DISABLE_MEDUSA_ADMIN: "true"
-      STORE_CORS: ${STORE_CORS:-http://localhost:8000}
-      ADMIN_CORS: ${ADMIN_CORS:-http://localhost:9000}
-      AUTH_CORS: ${AUTH_CORS:-http://localhost:8000,http://localhost:9000}
+      JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey123}
+      COOKIE_SECRET: ${COOKIE_SECRET:-supersecretcookiekey123}
       MEILISEARCH_HOST: http://meilisearch:7700
-      MEILISEARCH_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:-your-meilisearch-master-key-change-me}
+      MEILISEARCH_API_KEY: ${MEILISEARCH_MASTER_KEY:-your_meilisearch_master_key}
+      MEDUSA_WORKER_MODE: worker
     depends_on:
       postgres:
         condition: service_healthy
@@ -111,34 +99,23 @@ services:
         condition: service_healthy
       meilisearch:
         condition: service_healthy
-      medusa-server:
-        condition: service_started
-    networks:
-      - medusa-net
-    command: npm run start:worker
 
   medusa-storefront:
     build:
       context: ./apps/storefront
       dockerfile: Dockerfile
-    container_name: medusa-storefront
     restart: unless-stopped
     ports:
-      - "8080:3000"
+      - "8000:8000"
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_MEDUSA_BACKEND_URL: http://medusa-server:9000
-      NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY: ${MEDUSA_PUBLISHABLE_KEY:-pk_123}
+      NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${NEXT_PUBLIC_MEDUSA_BACKEND_URL:-http://medusa-server:9000}
+      NEXT_PUBLIC_STORE_CORS: ${NEXT_PUBLIC_STORE_CORS:-http://localhost:8000}
     depends_on:
-      - medusa-server
-    networks:
-      - medusa-net
+      medusa-server:
+        condition: service_healthy
 
 volumes:
   postgres_data:
   redis_data:
   meilisearch_data:
-
-networks:
-  medusa-net:
-    driver: bridge

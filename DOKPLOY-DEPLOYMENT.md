@@ -15,7 +15,7 @@ This guide walks you through deploying the Medusa 2.0 Multi-Vendor Store on Dokp
 │  │  meilisearch (port 7700)                          │  │
 │  │  medusa-server (port 9000)                        │  │
 │  │  medusa-worker (no exposed port)                  │  │
-│  │  medusa-storefront (port 8080)                    │  │
+│  │  medusa-storefront (port 8000)                    │  │
 │  └───────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -51,7 +51,7 @@ Go to the **Environment** tab and add the following variables:
 ### Database
 ```
 POSTGRES_USER=medusa
-POSTGRES_DB=medusa-store
+POSTGRES_DB=medusa_store
 POSTGRES_PASSWORD=your-secure-password-here
 ```
 
@@ -92,7 +92,8 @@ MEILISEARCH_MASTER_KEY=your-meilisearch-master-key-change-this
 
 ### Storefront
 ```
-MEDUSA_PUBLISHABLE_KEY=pk_your-publishable-key
+NEXT_PUBLIC_MEDUSA_BACKEND_URL=https://api.yourdomain.com
+NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY=pk_your-publishable-key
 ```
 
 ## Step 5: Configure Domains
@@ -100,7 +101,7 @@ MEDUSA_PUBLISHABLE_KEY=pk_your-publishable-key
 1. Go to the **Domains** tab
 2. Add your domains:
    - **Medusa Server**: `api.yourdomain.com` (port 9000)
-   - **Storefront**: `store.yourdomain.com` (port 3000)
+   - **Storefront**: `store.yourdomain.com` (port 8000)
    - **Meilisearch**: `search.yourdomain.com` (port 7700, optional)
 
 ## Step 6: Deploy
@@ -141,12 +142,32 @@ To update your deployment:
 2. Dokploy will automatically deploy (if auto-deploy is enabled)
 3. Or manually trigger a deployment from the Dokploy dashboard
 
+> **Important**: When deploying updates, Docker may cache build layers. If you encounter stale dependency issues, clear the build cache before redeploying:
+> ```bash
+> docker builder prune -a
+> ```
+
 ## Troubleshooting
+
+### Docker Build Fails with `node_modules` Not Found
+- This is usually a Docker cache issue. Clear the build cache and rebuild:
+  ```bash
+  docker builder prune -a
+  docker compose build --no-cache
+  ```
+
+### npm 429 Too Many Requests
+- The Dockerfile includes retry logic (5 retries, 60s wait) to handle npm rate limiting.
+- If it persists, add a build delay or use `npm config set registry https://registry.npmmirror.com` in the Dockerfile.
+
+### `pull access denied for medusa-backend`
+- This was a known issue when the worker service referenced the server's image before it was built.
+- Both server and worker now build independently from the same Dockerfile, eliminating this issue.
 
 ### Services Not Starting
 - Check logs in Dokploy's Logs tab
 - Verify all environment variables are set correctly
-- Ensure PostgreSQL and Redis are healthy
+- Ensure PostgreSQL, Redis, and Meilisearch are healthy
 
 ### CORS Errors
 - Update `STORE_CORS`, `ADMIN_CORS`, and `AUTH_CORS` with your actual domain URLs
@@ -155,10 +176,16 @@ To update your deployment:
 ### Database Connection Issues
 - Verify `POSTGRES_PASSWORD` matches across all services
 - Check that PostgreSQL is running and accessible
+- SSL is disabled in the configuration for Docker internal connections
 
 ### Meilisearch Issues
 - Ensure `MEILISEARCH_MASTER_KEY` is set
 - Check Meilisearch logs for connection errors
+
+### Storefront Build Fails
+- Ensure `next.config.js` has `output: "standalone"`
+- Ensure `public/` directory has at least one file
+- Check that `package-lock.json` exists (run `npm install` locally to generate)
 
 ## Scaling
 

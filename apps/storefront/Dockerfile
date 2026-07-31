@@ -6,7 +6,19 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm install
+
+# Configure npm and retry on failure
+RUN npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 60000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    for i in 1 2 3 4 5; do \
+      echo "Attempt $i: npm install..." && \
+      npm install && \
+      echo "Attempt $i succeeded" && \
+      break || \
+      echo "Attempt $i failed, waiting 60s before retry..." && \
+      sleep 60; \
+    done
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -31,9 +43,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 
-EXPOSE 3000
+EXPOSE 8000
 
-ENV PORT 3000
+ENV PORT 8000
 ENV HOSTNAME "0.0.0.0"
 
 CMD ["npm", "start"]

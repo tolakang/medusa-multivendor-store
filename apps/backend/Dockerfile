@@ -6,7 +6,19 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN for i in 1 2 3; do npm install && break && echo "Attempt $i succeeded" || echo "Retry $i failed, waiting 30s..." && sleep 30; done
+
+# Configure npm to reduce requests and handle rate limits
+RUN npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 60000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    for i in 1 2 3 4 5; do \
+      echo "Attempt $i: npm install..." && \
+      npm install && \
+      echo "Attempt $i succeeded" && \
+      break || \
+      echo "Attempt $i failed, waiting 60s before retry..." && \
+      sleep 60; \
+    done
 
 # Rebuild the source code only when needed
 FROM base AS builder
