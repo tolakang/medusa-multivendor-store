@@ -2,11 +2,11 @@
   "name": "@medusa/backend",
   "version": "1.0.0",
   "private": true,
-  "description": "Medusa 2.0 multi-vendor e-commerce backend",
+  "description": "Medusa 2.0 multi-vendor e-commerce backend for Dokploy",
   "scripts": {
     "dev": "medusa develop",
-    "build": "medusa build",
-    "start": "cd .medusa/server && medusa start",
+    "build": "medusa build && node src/scripts/post-build.js",
+    "start": "cd .medusa/server && medusa start --verbose",
     "predeploy": "medusa db:migrate && medusa links:sync",
     "migrate": "medusa db:migrate",
     "seed": "medusa seed",
@@ -15,7 +15,12 @@
   "dependencies": {
     "@medusajs/medusa": "^2.0.0",
     "@medusajs/cli": "^2.0.0",
-    "dotenv": "^16.0.3"
+    "@medusajs/framework": "^2.0.0",
+    "@medusajs/dashboard": "^2.0.0",
+    "@medusajs/workflow-engine-redis": "^2.0.0",
+    "@rokmohar/medusa-plugin-meilisearch": "^1.4.0",
+    "pg": "^8.13.0",
+    "dotenv": "^16.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
