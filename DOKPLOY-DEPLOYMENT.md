@@ -13,14 +13,53 @@ This guide walks you through deploying the Medusa 2.0 Multi-Vendor Store on Dokp
 │  │  postgres (port 5432)                             │  │
 │  │  redis (port 6379)                                │  │
 │  │  meilisearch (port 7700)                          │  │
-│  │  medusa-server (port 9000)                        │  │
-│  │  medusa-worker (no exposed port)                  │  │
+│  │  medusa-server (port 9000)  ─── builds image     │  │
+│  │  medusa-worker             ─── reuses server img │  │
 │  │  medusa-storefront (port 8000)                    │  │
 │  └───────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────┘
 ```
 
 > **Important**: You do NOT need to create separate Dokploy applications for each service. One Docker Compose deployment handles all services with automatic dependency ordering and health checks.
+
+## Monorepo vs Multi-Service Individual Deployment
+
+### Recommendation: **Single Docker Compose (Monorepo)** ✅
+
+For your use case, a **single Docker Compose deployment from the monorepo** is the better choice. Here's why:
+
+| Factor | Single Docker Compose | Multi-Service Individual |
+|--------|----------------------|-------------------------|
+| **Deployment complexity** | ✅ One deployment handles everything | ❌ 6 separate Dokploy apps to manage |
+| **Service discovery** | ✅ Services find each other by name (`postgres`, `redis`) | ❌ Need to configure cross-service networking |
+| **Health checks** | ✅ `depends_on` with `condition: service_healthy` ensures proper startup order | ❌ Manual coordination between services |
+| **Updates** | ✅ One push updates everything | ❌ Must coordinate updates across 6 apps |
+| **Resource usage** | ✅ Single build pipeline, shared layers | ❌ 6 separate builds, more disk/memory |
+| **Database access** | ✅ Internal Docker network, no exposed ports needed | ❌ Must expose DB ports and use external IPs |
+| **Security** | ✅ Services communicate internally only | ❌ More attack surface with exposed ports |
+| **Cost** | ✅ One Dokploy service = less resource overhead | ❌ 6 services × resource allocation |
+
+### When Multi-Service IS Better
+
+Multi-service individual deployment makes sense when:
+- You need to scale individual services independently (e.g., 10 worker instances)
+- Different services have very different update frequencies
+- You want to use managed databases (e.g., AWS RDS for PostgreSQL) instead of containerized ones
+- You're running across multiple nodes/regions
+
+### Your Architecture
+
+```
+One Dokploy Docker Compose App
+├── postgres (Alpine, volume-backed)
+├── redis (Alpine, volume-backed)
+├── meilisearch (Official image, volume-backed)
+├── medusa-server (Builds from ./apps/backend, exposes port 9000)
+├── medusa-worker (Reuses medusa-server image, different env)
+└── medusa-storefront (Builds from ./apps/storefront, exposes port 8000)
+```
+
+**Key design decision**: The `medusa-worker` reuses the server's Docker image (`image: medusa-backend`). This eliminates duplicate `npm install` runs and prevents npm 429 rate limiting. The only difference is the `MEDUSA_WORKER_MODE` environment variable.
 
 ## Step 1: Prepare Your Repository
 
@@ -158,11 +197,24 @@ To update your deployment:
 
 ### npm 429 Too Many Requests
 - The Dockerfile includes retry logic (5 retries, 60s wait) to handle npm rate limiting.
+- The worker reuses the server's image, so only ONE `npm install` runs.
 - If it persists, add a build delay or use `npm config set registry https://registry.npmmirror.com` in the Dockerfile.
 
 ### `pull access denied for medusa-backend`
-- This was a known issue when the worker service referenced the server's image before it was built.
-- Both server and worker now build independently from the same Dockerfile, eliminating this issue.
+- This occurs when the worker references the server's image before it's built.
+- The worker now uses `image: medusa-backend` with `depends_on: medusa-server: condition: service_healthy`.
+- Docker Compose builds the server first, then starts the worker with the pre-built image.
+- If this still occurs, use a custom build command in Dokploy (see below).
+
+### Custom Build Command (if needed)
+
+If you encounter the `pull access denied` error, set a custom build command in Dokploy's Docker Compose settings:
+
+```bash
+docker build -t medusa-backend ./apps/backend && docker compose -p {appName} -f ./docker-compose.yml up -d --remove-orphans
+```
+
+This ensures the server image is built before docker-compose tries to resolve the worker's image.
 
 ### Services Not Starting
 - Check logs in Dokploy's Logs tab

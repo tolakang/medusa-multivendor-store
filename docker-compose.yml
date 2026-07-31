@@ -49,6 +49,7 @@ services:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile
+    image: medusa-backend
     restart: unless-stopped
     ports:
       - "9000:9000"
@@ -79,9 +80,7 @@ services:
       start_period: 90s
 
   medusa-worker:
-    build:
-      context: ./apps/backend
-      dockerfile: Dockerfile
+    image: medusa-backend
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -93,6 +92,8 @@ services:
       MEILISEARCH_API_KEY: ${MEILISEARCH_MASTER_KEY:-your_meilisearch_master_key}
       MEDUSA_WORKER_MODE: worker
     depends_on:
+      medusa-server:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
