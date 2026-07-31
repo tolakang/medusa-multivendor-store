@@ -1,15 +1,24 @@
 # =============================================================================
 # Next.js Storefront — Optimized for rate-limited environments
+#
+# Build with NPM token for authenticated builds (50x higher rate limits):
+#   docker build --build-arg NEXT_PUBLIC_MEDUSA_BACKEND_URL=https://api.example.com \
+#                --build-arg NPM_TOKEN=npm_xxxxx .
 # =============================================================================
 FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
-WORKDIR /app
+ARG NPM_TOKEN
 ARG NEXT_PUBLIC_MEDUSA_BACKEND_URL
 ENV NEXT_PUBLIC_MEDUSA_BACKEND_URL=$NEXT_PUBLIC_MEDUSA_BACKEND_URL
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
 COPY package.json .npmrc pnpm-lock.yaml* ./
+RUN if [ -n "$NPM_TOKEN" ]; then \
+      echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> .npmrc && \
+      echo "✓ npm authenticated — 50x higher rate limits enabled"; \
+    fi
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     --mount=type=cache,target=/root/.npm \
     (pnpm install \

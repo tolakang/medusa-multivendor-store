@@ -1,14 +1,22 @@
 # =============================================================================
 # Medusa 2.0 Worker — Async Jobs, Events, Subscribers
 # Optimized for rate-limited environments
+#
+# Build with NPM token for authenticated builds (50x higher rate limits):
+#   docker build --build-arg NPM_TOKEN=npm_xxxxx -f Dockerfile.worker .
 # =============================================================================
 FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 FROM base AS deps
+ARG NPM_TOKEN
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package.json .npmrc pnpm-lock.yaml* ./
+RUN if [ -n "$NPM_TOKEN" ]; then \
+      echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> .npmrc && \
+      echo "✓ npm authenticated — 50x higher rate limits enabled"; \
+    fi
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     --mount=type=cache,target=/root/.npm \
     (pnpm install \

@@ -42,7 +42,7 @@
 | Medusa Worker | Custom build | — | Background Jobs |
 | Storefront | Custom build | 3000 | Next.js Storefront |
 
-## Quick Start (6 Steps)
+## Quick Start (7 Steps)
 
 > **Prerequisites**: Dokploy installed on Ubuntu, domain pointed to your server, Git access to this repo.
 
@@ -60,6 +60,17 @@ git push origin main
 ```
 
 This generates `pnpm-lock.yaml` files that prevent npm rate limiting. **Run once, never needed again** (unless you update `package.json`).
+
+### Step 0.5 — Get npm Auth Token (RECOMMENDED!)
+
+> 💡 **This is the single most effective way to prevent 429 errors.** Authenticated npm requests get **50x higher rate limits**.
+
+1. Create a free npm account at https://www.npmjs.com/signup
+2. Go to https://www.npmjs.com/settings/tokens → **Generate New Token** → **Automation**
+3. Name it `dokploy-oracle` → **Generate Token** → Copy the `npm_xxx` token
+4. In Dokploy, add `NPM_TOKEN=npm_your_token` to **each** service (server, worker, storefront)
+
+The Dockerfiles automatically detect `NPM_TOKEN` and authenticate during builds. The token is never saved in image layers.
 
 ### Step 1 — Deploy Infrastructure
 
@@ -82,7 +93,8 @@ This generates `pnpm-lock.yaml` files that prevent npm rate limiting. **Run once
 2. Upload: `docker-compose.server.yml`
 3. Set env vars (use hostnames from Step 1):
    ```
-   DATABASE_URL=postgresql://medusa:YourStrongPassword123!@medusa-infra-postgres:5432/medusa_store
+   NPM_TOKEN=npm_your_token
+   DATABASE_URL=******medusa-infra-postgres:5432/medusa_store
    REDIS_URL=redis://medusa-infra-redis:6379
    MEILISEARCH_HOST=http://medusa-infra-meilisearch:7700
    MEILISEARCH_ADMIN_KEY=YourMeilisearchMasterKey123!
@@ -105,7 +117,8 @@ This generates `pnpm-lock.yaml` files that prevent npm rate limiting. **Run once
 2. Upload: `docker-compose.worker.yml`
 3. Set env vars (SAME secrets as server):
    ```
-   DATABASE_URL=postgresql://medusa:YourStrongPassword123!@medusa-infra-postgres:5432/medusa_store
+   NPM_TOKEN=npm_your_token
+   DATABASE_URL=******medusa-infra-postgres:5432/medusa_store
    REDIS_URL=redis://medusa-infra-redis:6379
    MEILISEARCH_HOST=http://medusa-infra-meilisearch:7700
    MEILISEARCH_ADMIN_KEY=YourMeilisearchMasterKey123!
@@ -121,8 +134,9 @@ This generates `pnpm-lock.yaml` files that prevent npm rate limiting. **Run once
 
 1. Docker Compose → **Create Service** → Name: `medusa-storefront`
 2. Upload: `docker-compose.storefront.yml`
-3. Set env var:
+3. Set env vars:
    ```
+   NPM_TOKEN=npm_your_token
    NEXT_PUBLIC_MEDUSA_BACKEND_URL=https://api.yourdomain.com
    ```
 4. Click **Deploy** → Wait 5-8 min

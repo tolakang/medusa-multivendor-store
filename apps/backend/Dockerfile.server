@@ -1,15 +1,24 @@
 # =============================================================================
 # Medusa 2.0 Server — API + Admin + Scheduled Jobs
 # Optimized for rate-limited environments (Oracle Cloud, etc.)
+#
+# Build with NPM token for authenticated builds (50x higher rate limits):
+#   docker build --build-arg NPM_TOKEN=npm_xxxxx -f Dockerfile.server .
 # =============================================================================
 FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # ---- Phase 1: Install dependencies (cached via BuildKit) ----
 FROM base AS deps
+ARG NPM_TOKEN
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package.json .npmrc pnpm-lock.yaml* ./
+# Generate authenticated .npmrc if NPM_TOKEN is provided
+RUN if [ -n "$NPM_TOKEN" ]; then \
+      echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> .npmrc && \
+      echo "✓ npm authenticated — 50x higher rate limits enabled"; \
+    fi
 # Install dependencies with aggressive retry for rate-limited environments
 # --prefer-offline: use local cache before hitting registry
 # --no-frozen-lockfile: generate lockfile if missing

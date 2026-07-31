@@ -56,6 +56,8 @@ services:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile
+      args:
+        NPM_TOKEN: ${NPM_TOKEN:-}
     restart: unless-stopped
     ports:
       - "${MEDUSA_PORT:-9000}:9000"
@@ -92,6 +94,8 @@ services:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile
+      args:
+        NPM_TOKEN: ${NPM_TOKEN:-}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -124,6 +128,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${NEXT_PUBLIC_MEDUSA_BACKEND_URL:-http://localhost:9000}
+        NPM_TOKEN: ${NPM_TOKEN:-}
     restart: unless-stopped
     ports:
       - "${STOREFRONT_PORT:-8000}:3000"

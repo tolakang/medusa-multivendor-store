@@ -8,6 +8,8 @@ services:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile.server
+      args:
+        NPM_TOKEN: ${NPM_TOKEN:-}
     restart: unless-stopped
     ports:
       - "${MEDUSA_PORT:-9000}:9000"

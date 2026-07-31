@@ -62,6 +62,43 @@ git push origin main
 
 ---
 
+### Step 0.5: Get an npm Auth Token (RECOMMENDED — Prevents 429)
+
+**This is the single most effective way to prevent 429 errors.** Authenticated npm requests get **50x higher rate limits** than anonymous requests.
+
+#### 0.5.1 Create an npm account
+
+1. Go to https://www.npmjs.com/signup
+2. Create a free account (or use an existing one)
+
+#### 0.5.2 Generate an Automation token
+
+1. Log in to https://www.npmjs.com
+2. Go to **Access Tokens** → https://www.npmjs.com/settings/tokens
+3. Click **Generate New Token** → **Automation**
+4. Name it: `dokploy-oracle`
+5. Click **Generate Token**
+6. **Copy the token** (starts with `npm_`)
+
+> ⚠️ **Copy it now** — you won't see it again!
+
+#### 0.5.3 Set NPM_TOKEN in Dokploy
+
+For **each** Dokploy service (server, worker, storefront):
+
+1. Open the service in Dokploy
+2. Go to **Environment Variables** (or **Build** → **Build Args**)
+3. Add:
+   ```
+   NPM_TOKEN=npm_your_token_here
+   ```
+
+> 💡 **What this does**: The Dockerfiles automatically detect `NPM_TOKEN` and authenticate with npm during builds. The token is never saved in image layers (it's only used during `pnpm install`).
+
+> ⚠️ **Security note**: The token only exists during the Docker build stage. It is NOT baked into the final image and NOT visible at runtime.
+
+---
+
 ### Step 1: Deploy Infrastructure (postgres + redis + meilisearch)
 
 This is the FIRST thing to deploy. It runs 3 containers that your app services need.
@@ -160,8 +197,11 @@ Deploy the Medusa server AFTER infrastructure is healthy.
 Click **Environment Variables** and add these **exact values**:
 
 ```bash
+# ---- NPM Token (RECOMMENDED — prevents 429) ----
+NPM_TOKEN=npm_your_token_from_step_0_5
+
 # ---- Database Connection ----
-DATABASE_URL=postgresql://medusa:YourStrongPassword123!@medusa-infra-postgres:5432/medusa_store
+DATABASE_URL=******medusa-infra-postgres:5432/medusa_store
 
 # ---- Redis Connection ----
 REDIS_URL=redis://medusa-infra-redis:6379
@@ -191,6 +231,7 @@ NODE_ENV=production
 ```
 
 > ⚠️ **You MUST replace these values**:
+> - `npm_your_token_from_step_0_5` → your npm token from Step 0.5
 > - `YourStrongPassword123!` → your actual PostgreSQL password (from Step 1.3)
 > - `medusa-infra-postgres` → the actual hostname from Step 1.5
 > - `medusa-infra-redis` → the actual hostname from Step 1.5
@@ -255,8 +296,11 @@ Deploy the worker AFTER server is running.
 Click **Environment Variables** and add these **exact values**:
 
 ```bash
+# ---- NPM Token (RECOMMENDED — prevents 429) ----
+NPM_TOKEN=npm_your_token_from_step_0_5
+
 # ---- Database Connection ----
-DATABASE_URL=postgresql://medusa:YourStrongPassword123!@medusa-infra-postgres:5432/medusa_store
+DATABASE_URL=******medusa-infra-postgres:5432/medusa_store
 
 # ---- Redis Connection ----
 REDIS_URL=redis://medusa-infra-redis:6379
@@ -278,6 +322,7 @@ NODE_ENV=production
 ```
 
 > ⚠️ **Critical requirements**:
+> - `NPM_TOKEN` — same token from Step 0.5 (for faster builds)
 > - `JWT_SECRET` and `COOKIE_SECRET` must be **the SAME values** as the server (Step 2.3)
 > - `DATABASE_URL`, `REDIS_URL`, `MEILISEARCH_HOST` must use the **same hostnames** as the server
 > - `MEDUSA_WORKER_MODE=worker` (NOT `server`)
@@ -318,12 +363,16 @@ Deploy the storefront AFTER server is running.
 Click **Environment Variables** and add:
 
 ```bash
+# ---- NPM Token (RECOMMENDED — prevents 429) ----
+NPM_TOKEN=npm_your_token_from_step_0_5
+
 # ---- Backend URL (your server's public API address) ----
 NEXT_PUBLIC_MEDUSA_BACKEND_URL=https://api.yourdomain.com
 ```
 
 > ⚠️ **Important**:
-> - This must be the **public URL** of your Medusa server (with `https://` if SSL is enabled)
+> - `NPM_TOKEN` — same token from Step 0.5 (for faster builds)
+> - `NEXT_PUBLIC_MEDUSA_BACKEND_URL` must be the **public URL** of your Medusa server (with `https://` if SSL is enabled)
 > - This is a **build-time variable** — Next.js inlines it during build. Changing it requires a rebuild/redeploy.
 
 #### 4.4 Deploy
@@ -418,6 +467,9 @@ Single deploy for all 6 services. Simpler but slower.
 ### Monorepo Environment Variables
 
 ```bash
+# ---- NPM Token (RECOMMENDED — prevents 429) ----
+NPM_TOKEN=npm_your_token_from_step_0_5
+
 # ---- PostgreSQL ----
 POSTGRES_USER=medusa
 POSTGRES_PASSWORD=YourStrongPassword123!
@@ -472,9 +524,16 @@ Phase 3 (runner)   → Minimal production image
 | Worker | 10-15 min | 30-60s | 3-5 min |
 | Storefront | 5-8 min | 30-60s | 2-3 min |
 
+> 💡 **With NPM_TOKEN**: First builds are typically **3-5 minutes faster** because authenticated requests don't trigger rate limits.
+
 ---
 
 ## Environment Variables — Complete Reference
+
+### Build Variables (for Dokploy Build Args)
+| Variable | Where | Notes |
+|----------|-------|-------|
+| `NPM_TOKEN` | Server, Worker, Storefront | npm auth token for faster builds |
 
 ### PostgreSQL (Infrastructure)
 | Variable | Value | Notes |
@@ -491,7 +550,7 @@ Phase 3 (runner)   → Minimal production image
 ### Medusa Server & Worker
 | Variable | Server Value | Worker Value | Notes |
 |----------|-------------|-------------|-------|
-| `DATABASE_URL` | `postgresql://medusa:pass@host:5432/medusa_store` | Same | Must match |
+| `DATABASE_URL` | `******host:5432/medusa_store` | Same | Must match |
 | `REDIS_URL` | `redis://host:6379` | Same | Must match |
 | `MEILISEARCH_HOST` | `http://host:7700` | Same | Must match |
 | `MEILISEARCH_ADMIN_KEY` | `your-key` | Same | Must match infra |
@@ -521,9 +580,10 @@ Phase 3 (runner)   → Minimal production image
 ### Build Fails with 429 Rate Limit
 **Symptoms**: `ERR_PNPM_FETCH_429` or `Too Many Requests`
 **Fix**:
-1. **First**: Make sure you completed **Step 0** (generate lockfiles). This is the #1 cause.
-2. **If lockfiles exist**: Wait 10-60 min, deploy one service at a time.
-3. **If still failing**: Use Level 2 or 3 solutions in the 429 section below.
+1. **First**: Set `NPM_TOKEN` in Dokploy (Step 0.5) — this is the #1 fix.
+2. **Second**: Make sure you completed **Step 0** (generate lockfiles).
+3. **If still failing**: Wait 10-60 min, deploy one service at a time.
+4. **If still failing**: Use Level 2 or 3 solutions in the 429 section below.
 
 ### ts-node Not Found
 **Symptoms**: "Cannot find module ts-node"
@@ -596,13 +656,29 @@ Oracle Cloud free-tier IPs are shared and heavily rate-limited by the npm regist
 
 ### Solution Overview
 
-There are **3 levels of solutions**, from simplest to most robust:
+There are **4 levels of solutions**, from simplest to most robust:
 
 | Level | Solution | First Build | Subsequent Builds | Effort |
 |-------|----------|-------------|-------------------|--------|
-| 1 | Dockerfile fixes (already applied) | 15-30 min (with retries) | 30-60s | Zero |
+| 0 | **npm Auth Token** | 3-5 min | 30-60s | Free npm account |
+| 1 | Lockfiles + Dockerfile fixes | 15-30 min (with retries) | 30-60s | Generate lockfiles |
 | 2 | Pre-built base image | 15 min (once) | 30-60s | Run script once |
 | 3 | Verdaccio caching proxy | 10-15 min | 30-60s | Install on server |
+
+### Level 0: npm Auth Token (RECOMMENDED — Do This First!)
+
+**This is the single most effective solution.** An npm Automation token gives you **50x higher rate limits** than anonymous requests.
+
+```bash
+# 1. Create npm account at https://www.npmjs.com/signup
+# 2. Generate token at https://www.npmjs.com/settings/tokens → Automation
+# 3. Set NPM_TOKEN in Dokploy for each service:
+NPM_TOKEN=npm_your_token_here
+```
+
+The Dockerfiles automatically detect `NPM_TOKEN` and authenticate during builds. The token is never baked into image layers.
+
+**After setting NPM_TOKEN**, your Dockerfile retry logic is mostly a safety net — you likely won't hit 429 at all.
 
 ### Level 1: Lockfiles + Dockerfile Fixes (Do This First!)
 
@@ -702,8 +778,9 @@ services:
 
 | Scenario | What Happens | Time |
 |----------|-------------|------|
-| **First build with lockfile** | Downloads specific packages only | 3-5 min |
-| **First build WITHOUT lockfile** | Resolves + downloads ALL packages | 10-15 min |
+| **First build with lockfile + NPM_TOKEN** | Authenticated download, specific packages only | **3-5 min** |
+| **First build with lockfile, no token** | Anonymous download, specific packages only | 10-15 min |
+| **First build WITHOUT lockfile** | Resolves + downloads ALL packages | 10-15 min (may fail) |
 | **Redeploy (no code change)** | Uses BuildKit cache mount | 30-60s |
 | **After code change** | Skips phase 1, rebuilds phases 2-3 | 3-5 min |
 | **After base image** | Skips entire pnpm install | 30-60s |
