@@ -281,6 +281,27 @@ Dokploy uses Docker Compose internally. Service names follow these patterns:
 
 ---
 
+## ⏱️ Expected Build Times
+
+| Build Type | First Time | Cached Rebuild |
+|------------|-----------|----------------|
+| Infrastructure (postgres, redis, meilisearch) | ~10s (pull images) | ~10s |
+| Server | 5-15 minutes | 1-3 minutes |
+| Worker | 5-15 minutes | 1-3 minutes |
+| Storefront | 3-8 minutes | 1-2 minutes |
+
+**Why is the first build slow?**
+- Medusa v2 has **500+ npm packages** that need to be downloaded
+-  compiles TypeScript + builds admin dashboard
+-  runs  in the build output
+
+**If build takes >15 minutes:**
+1. Check your server's CPU/RAM (Oracle Cloud free tier may be slow)
+2. The build is likely still running — check Docker build logs
+3. Subsequent builds will be much faster due to Docker layer caching
+
+---
+
 ## ⚠️ Common Issues & Fixes
 
 ### 1. "Host not found" / Connection Refused
