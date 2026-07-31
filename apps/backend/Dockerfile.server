@@ -8,14 +8,29 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package.json pnpm-lock.yaml* ./
+# Use pnpm install with retry logic for rate-limited environments
+# --frozen-lockfile may fail if no lockfile exists, fallback to plain install
+# --fetch-retries=5 with 60s timeout handles npm 429 rate limits
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     echo "Installing dependencies with pnpm..." && \
-    pnpm install --frozen-lockfile || pnpm install
+    pnpm install \
+      --no-frozen-lockfile \
+      --fetch-retries=5 \
+      --fetch-retry-mintimeout=60000 \
+      --fetch-retry-maxtimeout=120000 \
+      --network-concurrency=4 \
+      || (echo "First attempt failed, retrying in 30s..." && \
+          sleep 30 && \
+          pnpm install \
+            --no-frozen-lockfile \
+            --fetch-retries=5 \
+            --fetch-retry-mintimeout=60000 \
+            --fetch-retry-maxtimeout=120000 \
+            --network-concurrency=4)
 
 FROM base AS builder
 WORKDIR /app
 ENV NODE_ENV=development
-# Install pnpm for post-build.js (needs it to run pnpm install --prod)
 RUN corepack enable && corepack prepare pnpm@latest --activate
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

@@ -8,21 +8,30 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 ARG NEXT_PUBLIC_MEDUSA_BACKEND_URL
-ARG NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_MEDUSA_BACKEND_URL=$NEXT_PUBLIC_MEDUSA_BACKEND_URL
-ENV NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY=$NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY
 COPY package.json pnpm-lock.yaml* ./
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     echo "Installing dependencies with pnpm..." && \
-    pnpm install --frozen-lockfile || pnpm install
+    pnpm install \
+      --no-frozen-lockfile \
+      --fetch-retries=5 \
+      --fetch-retry-mintimeout=60000 \
+      --fetch-retry-maxtimeout=120000 \
+      --network-concurrency=4 \
+      || (echo "First attempt failed, retrying in 30s..." && \
+          sleep 30 && \
+          pnpm install \
+            --no-frozen-lockfile \
+            --fetch-retries=5 \
+            --fetch-retry-mintimeout=60000 \
+            --fetch-retry-maxtimeout=120000 \
+            --network-concurrency=4)
 
 FROM base AS builder
 WORKDIR /app
 ENV NODE_ENV=production
 ARG NEXT_PUBLIC_MEDUSA_BACKEND_URL
-ARG NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_MEDUSA_BACKEND_URL=$NEXT_PUBLIC_MEDUSA_BACKEND_URL
-ENV NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY=$NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm run build

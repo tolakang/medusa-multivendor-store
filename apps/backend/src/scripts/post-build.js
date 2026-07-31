@@ -47,12 +47,15 @@ if (!fs.existsSync(generatedPkg)) {
   }
 }
 
-// Install production dependencies with retry logic
-console.log("Installing production dependencies in .medusa/server/...");
+// Install production dependencies with retry logic for rate-limited environments
+const PNPM_FLAGS = "--no-frozen-lockfile --fetch-retries=5 --fetch-retry-mintimeout=60000 --fetch-retry-maxtimeout=120000 --network-concurrency=4";
 const MAX_RETRIES = 3;
+const RETRY_DELAY = 30;
+
+console.log("Installing production dependencies in .medusa/server/...");
 for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
   try {
-    execSync("cd " + medusaServerDir + " && pnpm install --prod --no-fund --no-audit", {
+    execSync(`cd ${medusaServerDir} && pnpm install --prod ${PNPM_FLAGS}`, {
       stdio: "inherit",
     });
     console.log("Production dependencies installed successfully");
@@ -60,8 +63,8 @@ for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
   } catch (error) {
     console.error(`Attempt ${attempt}/${MAX_RETRIES} failed:`, error.message);
     if (attempt < MAX_RETRIES) {
-      console.log(`Retrying in 30s...`);
-      execSync("sleep 30");
+      console.log(`Retrying in ${RETRY_DELAY}s...`);
+      execSync(`sleep ${RETRY_DELAY}`);
     }
   }
 }
