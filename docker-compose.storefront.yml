@@ -7,6 +7,11 @@ services:
     build:
       context: ./apps/storefront
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${NEXT_PUBLIC_MEDUSA_BACKEND_URL:-http://localhost:9000}
+        NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-http://localhost:8000}
+        NEXT_PUBLIC_STORE_CORS: ${STORE_CORS:-http://localhost:8000}
+        STORE_NAME: ${STORE_NAME:-Medusa Multi-Vendor Store}
     restart: unless-stopped
     ports:
       - "${STOREFRONT_PORT:-8000}:3000"
