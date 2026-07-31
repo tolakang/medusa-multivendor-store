@@ -6,7 +6,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN for i in 1 2 3; do npm install && break && echo "Attempt $i succeeded" || echo "Retry $i failed, waiting 30s..." && sleep 30; done
 
 # Rebuild the source code only when needed
 FROM base AS builder

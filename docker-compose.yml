@@ -58,6 +58,7 @@ services:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile
+    image: medusa-backend
     container_name: medusa-server
     restart: unless-stopped
     ports:
@@ -87,9 +88,7 @@ services:
       - medusa-net
 
   medusa-worker:
-    build:
-      context: ./apps/backend
-      dockerfile: Dockerfile
+    image: medusa-backend
     container_name: medusa-worker
     restart: unless-stopped
     environment:
